@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openspec *)",
+      "Bash(read_file *)"
+    ]
+  },
+  "$version": 3
+}

@@ -15,15 +15,15 @@
 
 ## 4. Cloud Layer
 
-- [ ] 4.1 Implement a `drawCloud(x, y)` helper function that draws a pixel-art cloud shape using `fillRect` calls (hard-edged rectangles, no curves)
-- [ ] 4.2 Place at least 5 clouds at varying positions across the sky region with different sizes
+- [x] 4.1 Implement a `drawCloud(x, y)` helper function that draws a pixel-art cloud shape using `fillRect` calls (hard-edged rectangles, no curves)
+- [x] 4.2 Place at least 5 clouds at varying positions across the sky region with different sizes
 
 ## 5. City Skyline Layer
 
-- [ ] 5.1 Define an array of building definitions (x position, width, height, color from teal/cyan palette) with varying heights
-- [ ] 5.2 Implement `drawBuilding(x, y, width, height, color)` that draws a rectangular building rising from the horizon
-- [ ] 5.3 Add window patterns to each building using small filled rectangles in a grid pattern (lighter color than building body)
-- [ ] 5.4 Render all buildings across the full canvas width at the horizon line
+- [x] 5.1 Define an array of building definitions (x position, width, height, color from teal/cyan palette) with varying heights
+- [x] 5.2 Implement `drawBuilding(x, y, width, height, color)` that draws a rectangular building rising from the horizon
+- [x] 5.3 Add window patterns to each building using small filled rectangles in a grid pattern (lighter color than building body)
+- [x] 5.4 Render all buildings across the full canvas width at the horizon line
 
 ## 6. Ground Layer
 

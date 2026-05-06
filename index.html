@@ -56,9 +56,93 @@
       ctx.fillRect(0, 0, CANVAS_WIDTH, HORIZON_Y);
     }
 
-    // Main render function (will grow as we add layers)
+    // --- Task 4: Cloud Layer ---
+
+    // Task 4.1: Pixel-art cloud using hard-edged rectangles
+    function drawCloud(x, y) {
+      ctx.fillStyle = COLORS.cloud;
+      // Build a cloud from stacked horizontal rects (no curves)
+      const rows = [
+        { offset: 0, w: 64 },
+        { offset: -16, w: 48 },
+        { offset: 16, w: 48 },
+        { offset: -32, w: 32 },
+        { offset: 32, w: 32 }
+      ];
+      rows.forEach(row => {
+        ctx.fillRect(x + row.offset, y, row.w, 12);
+      });
+    }
+
+    // Task 4.2: Cloud positions (x, y, scale factor)
+    const CLOUDS = [
+      { x: 80, y: 60 },
+      { x: 300, y: 100 },
+      { x: 520, y: 50 },
+      { x: 680, y: 130 },
+      { x: 180, y: 160 }
+    ];
+
+    function drawClouds() {
+      CLOUDS.forEach(c => drawCloud(c.x, c.y));
+    }
+
+    // --- Task 5: City Skyline Layer ---
+
+    // Task 5.1: Building definitions (width, height, color index)
+    const BUILDINGS = [
+      { w: 40, h: 80, ci: 0 },
+      { w: 30, h: 120, ci: 1 },
+      { w: 50, h: 60, ci: 2 },
+      { w: 35, h: 140, ci: 0 },
+      { w: 45, h: 90, ci: 1 },
+      { w: 25, h: 110, ci: 2 },
+      { w: 55, h: 70, ci: 0 },
+      { w: 30, h: 130, ci: 1 },
+      { w: 40, h: 95, ci: 2 },
+      { w: 35, h: 150, ci: 0 },
+      { w: 50, h: 75, ci: 1 },
+      { w: 28, h: 105, ci: 2 },
+      { w: 42, h: 85, ci: 0 },
+      { w: 36, h: 125, ci: 1 },
+      { w: 48, h: 65, ci: 2 },
+      { w: 32, h: 115, ci: 0 },
+      { w: 44, h: 88, ci: 1 },
+      { w: 38, h: 135, ci: 2 }
+    ];
+
+    // Task 5.2 + 5.3: Draw a building with window grid
+    function drawBuilding(x, baseY, w, h, color) {
+      // Building body
+      ctx.fillStyle = color;
+      ctx.fillRect(x, baseY - h, w, h);
+
+      // Windows (lighter rectangles in a grid)
+      const winW = 6, winH = 8, gapX = 10, gapY = 12;
+      const marginX = 6, marginY = 8;
+      ctx.fillStyle = '#A8DADC';
+      for (let wy = baseY - h + marginY; wy < baseY - marginY; wy += winH + gapY) {
+        for (let wx = x + marginX; wx < x + w - marginX; wx += winW + gapX) {
+          ctx.fillRect(wx, wy, winW, winH);
+        }
+      }
+    }
+
+    // Task 5.4: Render skyline across the horizon
+    function drawSkyline() {
+      let cx = 0;
+      BUILDINGS.forEach(b => {
+        const color = COLORS.buildings[b.ci];
+        drawBuilding(cx, HORIZON_Y, b.w, b.h, color);
+        cx += b.w;
+      });
+    }
+
+    // Main render function
     function renderBackground() {
       drawSky();
+      drawClouds();
+      drawSkyline();
     }
 
     // Render on page load
