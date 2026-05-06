@@ -27,12 +27,12 @@
 
 ## 6. Ground Layer
 
-- [ ] 6.1 Fill the bottom strip of the canvas with solid brown earth color (`#8B6914`)
-- [ ] 6.2 Add subtle pixel-level texture variation to the ground (small darker/lighter rects) for dirt appearance
+- [x] 6.1 Fill the bottom strip of the canvas with solid brown earth color (`#8B6914`)
+- [x] 6.2 Add subtle pixel-level texture variation to the ground (small darker/lighter rects) for dirt appearance
 
 ## 7. Integration & Verification
 
-- [ ] 7.1 Create a `renderBackground()` function that calls all layer functions in order (sky → clouds → skyline → ground)
-- [ ] 7.2 Invoke `renderBackground()` once on page load (via `DOMContentLoaded` or script at end of body)
-- [ ] 7.3 Verify the page loads with no console errors and displays the complete background scene
-- [ ] 7.4 Verify no animation loops are running (no `requestAnimationFrame`, no `setInterval`)
+- [x] 7.1 Create a `renderBackground()` function that calls all layer functions in order (sky → clouds → skyline → ground)
+- [x] 7.2 Invoke `renderBackground()` once on page load (via `DOMContentLoaded` or script at end of body)
+- [x] 7.3 Verify the page loads with no console errors and displays the complete background scene
+- [x] 7.4 Verify no animation loops are running (no `requestAnimationFrame`, no `setInterval`)

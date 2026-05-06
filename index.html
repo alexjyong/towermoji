@@ -37,9 +37,9 @@
     // Task 2.3: Define layout constants and color palette
     const CANVAS_WIDTH = 800;
     const CANVAS_HEIGHT = 600;
-    const HORIZON_Y = 400;
     const GROUND_HEIGHT = 100;
     const GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT;
+    const HORIZON_Y = GROUND_Y;
 
     const COLORS = {
       sky: '#4A90D9',
@@ -138,14 +138,39 @@
       });
     }
 
-    // Main render function
+    // --- Task 6: Ground Layer ---
+
+    // Task 6.1 + 6.2: Draw ground with pixel texture variation
+    function drawGround() {
+      // Base fill
+      ctx.fillStyle = COLORS.ground;
+      ctx.fillRect(0, GROUND_Y, CANVAS_WIDTH, GROUND_HEIGHT);
+
+      // Pixel-level dirt texture (small darker/lighter rects)
+      const tileSize = 8;
+      for (let ty = GROUND_Y; ty < CANVAS_HEIGHT; ty += tileSize) {
+        for (let tx = 0; tx < CANVAS_WIDTH; tx += tileSize) {
+          if ((tx + ty) % 16 === 0) {
+            ctx.fillStyle = COLORS.groundDark;
+          } else if ((tx * ty) % 23 === 0) {
+            ctx.fillStyle = COLORS.groundLight;
+          } else {
+            continue;
+          }
+          ctx.fillRect(tx, ty, tileSize, tileSize);
+        }
+      }
+    }
+
+    // Task 7.1: Main render function — all layers in order
     function renderBackground() {
       drawSky();
       drawClouds();
       drawSkyline();
+      drawGround();
     }
 
-    // Render on page load
+    // Task 7.2: Render once on page load (no animation loop — task 7.4)
     document.addEventListener('DOMContentLoaded', renderBackground);
   </script>
 </body>
