@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Towermoji</title>
+  <style>
+    /* Task 1.2: Center canvas, dark background */
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background-color: #1a1a2e;
+    }
+
+    canvas {
+      border: 2px solid #333;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script>
+    // Task 2.1: Get the 2D rendering context
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Task 2.2: Disable image smoothing for crisp pixel art
+    ctx.imageSmoothingEnabled = false;
+
+    // Task 2.3: Define layout constants and color palette
+    const CANVAS_WIDTH = 800;
+    const CANVAS_HEIGHT = 600;
+    const HORIZON_Y = 400;
+    const GROUND_HEIGHT = 100;
+    const GROUND_Y = CANVAS_HEIGHT - GROUND_HEIGHT;
+
+    const COLORS = {
+      sky: '#4A90D9',
+      cloud: '#E8E8E8',
+      ground: '#8B6914',
+      groundDark: '#7A5C12',
+      groundLight: '#9C7618',
+      buildings: ['#2A7B6E', '#1F6B5E', '#358B7E']
+    };
+
+    // Task 3.1: Fill sky with mid-blue color
+    function drawSky() {
+      ctx.fillStyle = COLORS.sky;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, HORIZON_Y);
+    }
+
+    // Main render function (will grow as we add layers)
+    function renderBackground() {
+      drawSky();
+    }
+
+    // Render on page load
+    document.addEventListener('DOMContentLoaded', renderBackground);
+  </script>
+</body>
+</html>
