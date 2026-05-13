@@ -28,22 +28,26 @@ The system SHALL prevent creating more than 30 floor rows total.
 - **WHEN** `towerGrid` has 30 rows and the player attempts to place a cell in a 31st row
 - **THEN** the cell is not placed and `towerGrid` is unchanged
 
-### Requirement: Empty cells are visually distinct from built cells
+### Requirement: Empty cells beyond placed cells are not rendered
 
-The system SHALL render `null` cells with an unfinished/construction appearance (gray, rebar) and render built cells with their assigned floor type's interior detail.
+The system SHALL only render cells that have been placed. Cells beyond the rightmost placed cell in a row are not drawn — they show as background (sky/ground).
 
-#### Scenario: Null cell renders as unfinished
-- **WHEN** a cell in `towerGrid` is `null`
-- **THEN** that cell's area renders as unfinished construction
+#### Scenario: Unplaced cells show as background
+- **WHEN** row 0 has only cell 0 placed and cells 1–4 are `null`
+- **THEN** only cell 0 renders; cells 1–4 show the background behind them
 
 #### Scenario: Built cell renders its floor type
 - **WHEN** a cell in `towerGrid` is `'Residential'`
 - **THEN** that cell's area renders the Residential interior (walls, furniture, people)
 
-### Requirement: Structural columns render per row regardless of cell state
+### Requirement: Structural elements render only for rows with content
 
-The system SHALL render the floor number label, left staircase, elevator shaft, and right staircase for every row in `towerGrid`, regardless of whether the interior cells are built.
+The system SHALL render the floor number label, left staircase, elevator shaft, and floor beams only for rows that have at least one placed cell. The right staircase renders only when all cells in a row are placed.
 
-#### Scenario: Row renders structural elements even if all cells are null
-- **WHEN** a floor row exists but all its cells are `null`
-- **THEN** the label, staircases, and elevator shaft still render for that row
+#### Scenario: Row with one cell shows partial structure
+- **WHEN** a floor row has only cell 0 placed
+- **THEN** the label, left staircase, and elevator shaft render; the right staircase does not
+
+#### Scenario: Full row shows all structure
+- **WHEN** a floor row has all `GRID_COLS` cells placed
+- **THEN** all structural elements render including the right staircase

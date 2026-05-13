@@ -11,7 +11,7 @@ What's missing is the game's core interaction: a **cell-based grid** that lets t
 - Each floor row is divided into horizontal cells (segments) that can be independently placed
 - Mixed-use floors are supported (e.g., Residential + Shop on same floor)
 - Toolbar shows all buildable room types as emoji buttons
-- Floors grow from a fixed Lobby ground floor upward
+- Floors grow from a Lobby-only ground floor upward
 - Real-time canvas rendering updates after each placement
 
 **Non-Goals:**
@@ -24,11 +24,11 @@ What's missing is the game's core interaction: a **cell-based grid** that lets t
 
 **Grid stored as 2D array: `towerGrid[floorIndex][cellIndex]`**
 - Each floor row has `GRID_COLS` cells (e.g., 5 cells across the interior zone)
-- Grid starts **empty** — no pre-placed Lobby. Player places the first cell to begin building.
+- Grid starts **empty** — no pre-placed Lobby. Player places the first Lobby cell to begin building.
 - Unbuilt cells are `null`
 - A floor is "complete" when all its cells are non-null (no gaps)
-- The ground floor (index 0) can be any type, any width — tiny tower or wide building, player's choice
-- You can expand the ground floor later by placing more cells in row 0
+- The ground floor (index 0) is **Lobby-only** — no other types allowed on row 0
+- Player decides how wide the Lobby is (1–5 cells) and can expand it later
 
 **Cell width derived from available interior space**
 - Canvas width: 800px. After structural columns (label 26px, stairs 28px, shaft 22px, right stairs 28px) there are ~714px of interior space.
@@ -45,8 +45,8 @@ What's missing is the game's core interaction: a **cell-based grid** that lets t
 **Placement rules**
 - Cells must be filled **left-to-right** within a floor — you can't skip a cell
 - New floors (rows) can only be started when the floor below has at least one cell at that position or to its left
-- The **first placement** creates row 0 (ground floor) at cell 0 — no pre-existing Lobby
-- Ground floor can be any type, any width — player decides
+- The **first placement** creates row 0 (ground floor) at cell 0 — must be Lobby
+- Ground floor is Lobby-only; upper floors can be any type
 - Max tower height: 30 floors
 
 **Shop facades are a property of the rightmost cell(s)**
@@ -54,9 +54,9 @@ What's missing is the game's core interaction: a **cell-based grid** that lets t
 - The same floor can have Residential on the left + Shop on the right
 
 **Render approach: `drawTowerGrid()` iterates `towerGrid` and calls existing `drawTowerFloor()` per row, but the interior is assembled cell-by-cell**
-- The structural columns (labels, stairs, elevator) render per row as before
+- The structural columns (labels, stairs, elevator) render only for rows with placed cells
 - The interior zone is split into cells; each non-null cell renders its floor type's content at its X offset
-- `null` cells render as unfinished/construction
+- Cells beyond the rightmost placed cell are not drawn — they show as background
 
 ## Risks / Trade-offs
 

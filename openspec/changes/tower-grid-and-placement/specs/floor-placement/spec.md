@@ -1,12 +1,28 @@
 ## ADDED Requirements
 
+### Requirement: Ground floor must be Lobby
+
+The system SHALL only allow placing `'Lobby'` cells in row 0 (ground floor). Any other type selected when clicking a ground-floor cell is rejected.
+
+#### Scenario: Cannot place non-Lobby on ground floor
+- **WHEN** the player has selected `'Office'` and clicks an empty cell in row 0
+- **THEN** no cell is placed
+
+#### Scenario: Can place Lobby on ground floor
+- **WHEN** the player has selected `'Lobby'` and clicks an empty cell in row 0
+- **THEN** the cell is set to `'Lobby'`
+
 ### Requirement: The first placement creates the ground floor
 
 The system SHALL allow placing the very first cell even when `towerGrid` is empty, creating row 0 at cell 0.
 
 #### Scenario: First cell creates ground floor
-- **WHEN** `towerGrid` is empty and the player has selected a type and clicks to place
-- **THEN** row 0 is created with cell 0 set to the selected type
+- **WHEN** `towerGrid` is empty and the player has selected `'Lobby'` and clicks to place
+- **THEN** row 0 is created with cell 0 set to `'Lobby'`
+
+#### Scenario: First cell rejected if not Lobby
+- **WHEN** `towerGrid` is empty and the player has selected `'Office'` and clicks to place
+- **THEN** no cell is placed — ground floor must be Lobby
 
 ### Requirement: Clicking an empty cell places the selected floor type
 

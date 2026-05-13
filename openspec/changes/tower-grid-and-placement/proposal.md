@@ -13,14 +13,16 @@ SimTower (and the reference image) allows floors to be **mixed-use** — e.g., r
 - Cells fill **left-to-right** within a floor; new floors require the one below to exist
 - Floors can be **mixed-use** — different cell types on the same row
 - Shop facades render on the rightmost cells when Retail or Restaurant types are placed there
-- Tower starts with a fixed Lobby ground floor (all cells pre-filled)
+- Tower starts **empty** — player places the first Lobby cell to begin building
+- Ground floor (row 0) is **Lobby-only** — no other types allowed on row 0
+- Player decides how wide the Lobby is (1–5 cells) and can expand it later
 - Max tower height: 30 floors
 
 ## Capabilities
 
 ### New Capabilities
 
-- `tower-grid`: 2D cell-based grid system with per-cell placement, mixed-use floors, left-to-right fill constraint, and Lobby anchoring.
+- `tower-grid`: 2D cell-based grid system with per-cell placement, mixed-use floors, left-to-right fill constraint, and Lobby-only ground floor.
 - `toolbar-ui`: Emoji-based floor type selector toolbar rendered on canvas at the bottom.
 - `cell-placement`: Click-to-place mechanic enforcing placement rules (no gaps, sequential fill, max height cap). Triggers a brief placement flash animation.
 

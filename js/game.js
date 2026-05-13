@@ -194,20 +194,11 @@ function drawTowerGrid() {
       const dominant = cells.find(c => c !== null);
       drawTowerFloor(y, dominant, floorNum, cells);
     }
-
-    // Highlight first empty cell (placement target) — only on rows that exist
-    if (cells) {
-      const firstEmpty = cells.indexOf(null);
-      if (firstEmpty !== -1) {
-        const cr = getCellRect(fi, firstEmpty);
-        ctx.strokeStyle = '#FFD70088';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.strokeRect(cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2);
-        ctx.setLineDash([]);
-      }
-    }
   }
+
+  // Highlight the next valid placement target
+  drawPlacementHighlight();
+
   drawTowerFrame(top);
 }
 
@@ -321,6 +312,52 @@ function drawTowerFrame(top) {
   // Ground beam
   ctx.fillStyle = '#3D3D4D';
   ctx.fillRect(0, bot - 2, frameRight, 4);
+}
+
+function drawPlacementHighlight() {
+  // Find the next placeable cell: first empty cell in the topmost row that has content,
+  // or the cell above the topmost filled cell if that row is full
+  let targetFloor = -1;
+  let targetCell = -1;
+
+  if (towerGrid.length === 0) {
+    // Empty lot — highlight ground floor cell 0
+    targetFloor = 0;
+    targetCell = 0;
+  } else {
+    // Find the highest row with content
+    let topRow = -1;
+    for (let fi = towerGrid.length - 1; fi >= 0; fi--) {
+      if (towerGrid[fi].some(c => c !== null)) {
+        topRow = fi;
+        break;
+      }
+    }
+
+    if (topRow >= 0) {
+      // Check if top row has an empty cell
+      const firstEmpty = towerGrid[topRow].indexOf(null);
+      if (firstEmpty !== -1) {
+        targetFloor = topRow;
+        targetCell = firstEmpty;
+      } else {
+        // Top row is full — highlight cell above it
+        if (towerGrid.length < MAX_FLOORS) {
+          targetFloor = topRow + 1;
+          targetCell = 0;
+        }
+      }
+    }
+  }
+
+  if (targetFloor >= 0 && targetCell >= 0) {
+    const cr = getCellRect(targetFloor, targetCell);
+    ctx.strokeStyle = '#FFD70088';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2);
+    ctx.setLineDash([]);
+  }
 }
 
 function drawStairs(x, y, right) {
@@ -957,28 +994,34 @@ function handleToolbarClick(mx, my) {
 
 function handleCellClick(mx, my) {
   if (!selectedFloorType) return;
+
+  // Determine cell column from X position
+  const ci = Math.floor((mx - INTERIOR_X) / CELL_W);
+  if (ci < 0 || ci >= GRID_COLS) return;
+
   if (towerGrid.length === 0) {
     // First ever placement — create ground floor
-    if (towerGrid.length >= MAX_FLOORS) return;
     ensureFloorRow(0);
     placeCell(0, 0);
     return;
   }
 
-  // Find which floor row and cell column was clicked
+  // Find which floor row was clicked
   for (let fi = 0; fi < towerGrid.length; fi++) {
     const y = getFloorY(fi);
     if (my >= y && my < y + FLOOR_H) {
-      // Determine cell index from X position
-      const ci = Math.floor((mx - INTERIOR_X) / CELL_W);
-      if (ci >= 0 && ci < GRID_COLS) {
-        // If this is a new row (beyond current grid), validate support
-        if (fi >= towerGrid.length) {
-          ensureFloorRow(fi);
-        }
-        placeCell(fi, ci);
-      }
+      placeCell(fi, ci);
       return;
+    }
+  }
+
+  // Clicked above the highest floor — try to place in the next row
+  const nextRow = towerGrid.length;
+  if (nextRow < MAX_FLOORS) {
+    // Check if click Y is within the next floor's space
+    const nextY = getFloorY(nextRow);
+    if (my >= nextY && my < nextY + FLOOR_H) {
+      placeCell(nextRow, ci);
     }
   }
 }
@@ -991,6 +1034,9 @@ function placeCell(floorIdx, cellIdx) {
   if (!selectedFloorType) return;
   if (towerGrid.length >= MAX_FLOORS && floorIdx >= towerGrid.length) return;
 
+  // Ground floor (row 0) can only be Lobby
+  if (floorIdx === 0 && selectedFloorType !== 'Lobby') return;
+
   ensureFloorRow(floorIdx);
   const cells = towerGrid[floorIdx];
 
@@ -1002,13 +1048,13 @@ function placeCell(floorIdx, cellIdx) {
     if (cells[c] === null) return;
   }
 
-  // Support check: row below must have a cell at this column or to its left
+  // Support check: row below must have a cell directly below or one column to the left
   if (floorIdx > 0) {
     const below = towerGrid[floorIdx - 1];
     let hasSupport = false;
-    for (let c = 0; c <= cellIdx && c < below.length; c++) {
-      if (below[c] !== null) { hasSupport = true; break; }
-    }
+    // Check the cell directly below, and one to its left
+    if (cellIdx < below.length && below[cellIdx] !== null) hasSupport = true;
+    if (cellIdx > 0 && cellIdx - 1 < below.length && below[cellIdx - 1] !== null) hasSupport = true;
     if (!hasSupport) return;
   }
 
