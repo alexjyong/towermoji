@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Floor Preview — Towermoji</title>
+  <title>Floor Preview — Towermoji (SimTower Style)</title>
   <link rel="stylesheet" href="../css/style.css">
   <style>
     body { flex-direction: column; padding-bottom: 2rem; }
@@ -18,51 +18,61 @@
 </head>
 <body>
   <canvas id="gameCanvas" width="800" height="600"></canvas>
-  <div class="label">Floor Preview — side-view cross section | 24px tall, walls on edges</div>
+  <div class="label">Floor Preview — all 9 types + unfinished | SimTower/Kairosoft cross-section style</div>
+  <script>window.preview = 1;</script>
   <script src="../js/game.js"></script>
   <script>
-    /* Override default render — we want the showcase */
-    window.renderMode = 'preview';
+    // All floor types top → bottom (index 0 = top of screen, last = ground floor)
+    const previewFloors = [
+      'Rooftop Garden',
+      'Entertainment',
+      'Gym',
+      'Storage',
+      'Retail',
+      'Restaurant',
+      'Office',
+      'Residential',
+      'Lobby',
+    ];
+
+    function drawLegend(x, startY) {
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.font = '9px monospace';
+      FLOOR_TYPES.forEach((t, i) => {
+        const y = startY + i * 14;
+        ctx.fillStyle = t.wall;
+        ctx.fillRect(x, y - 4, 8, 8);
+        ctx.strokeStyle = '#FFFFFF44';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y - 4, 8, 8);
+        ctx.fillStyle = '#CCCCCC';
+        ctx.fillText(`${t.emoji} ${t.name}`, x + 12, y);
+      });
+      // Unfinished
+      const y = startY + FLOOR_TYPES.length * 14;
+      ctx.fillStyle = COLORS.unfinished;
+      ctx.fillRect(x, y - 4, 8, 8);
+      ctx.strokeStyle = '#FFFFFF44';
+      ctx.strokeRect(x, y - 4, 8, 8);
+      ctx.fillStyle = '#CCCCCC';
+      ctx.fillText(`  Unfinished`, x + 12, y);
+    }
 
     function renderFloorPreview() {
-      // Background behind everything
-      drawSky();
-      drawClouds();
-      drawSkyline();
-      drawGround();
+      renderBackground();
 
-      // Stack all 9 floor types above ground level (tower grows upward)
-      const startX = 0;
-      let y = GROUND_Y - FLOOR_H * FLOOR_TYPES.length;
+      const n = previewFloors.length;
+      const top = GROUND_Y - n * FLOOR_H;
 
-      for (let i = FLOOR_TYPES.length - 1; i >= 0; i--) {
-        drawFloor(startX, y, FLOOR_TYPES[i].name);
-
-        // Name label below each floor's bottom edge (left-aligned)
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = '9px monospace';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(FLOOR_TYPES[i].name, startX + WALL_W + 2, y - 1);
-
-        y += FLOOR_H;
+      for (let i = 0; i < n; i++) {
+        const y = top + i * FLOOR_H;
+        const floorNum = n - i; // ground floor = 1, top = n
+        drawTowerFloor(y, previewFloors[i], floorNum);
       }
+      drawTowerFrame(top);
 
-      // Ground-level marker line
-      ctx.strokeStyle = '#FFD70088';
-      ctx.lineWidth = 1;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(0, GROUND_Y + 0.5);
-      ctx.lineTo(CANVAS_WIDTH, GROUND_Y + 0.5);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // "GROUND" label
-      ctx.fillStyle = '#FFD70088';
-      ctx.font = '9px monospace';
-      ctx.textAlign = 'right';
-      ctx.fillText('G', CANVAS_WIDTH - 1, GROUND_Y + FLOOR_H * 0.5);
+      drawLegend(CANVAS_W - 120, 10);
     }
 
     renderFloorPreview();
