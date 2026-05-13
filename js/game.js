@@ -316,7 +316,8 @@ function drawTowerFrame(top) {
 
 function drawPlacementHighlight() {
   // Find the next placeable cell: first empty cell in the topmost row that has content,
-  // or the cell above the topmost filled cell if that row is full
+  // or the cell above the topmost filled cell if that row is full.
+  // Only highlight if the cell has support below.
   let targetFloor = -1;
   let targetCell = -1;
 
@@ -335,17 +336,15 @@ function drawPlacementHighlight() {
     }
 
     if (topRow >= 0) {
-      // Check if top row has an empty cell
+      // Check if top row has an empty cell with support below
       const firstEmpty = towerGrid[topRow].indexOf(null);
-      if (firstEmpty !== -1) {
+      if (firstEmpty !== -1 && hasSupportBelow(topRow, firstEmpty)) {
         targetFloor = topRow;
         targetCell = firstEmpty;
-      } else {
-        // Top row is full — highlight cell above it
-        if (towerGrid.length < MAX_FLOORS) {
-          targetFloor = topRow + 1;
-          targetCell = 0;
-        }
+      } else if (towerGrid.length < MAX_FLOORS) {
+        // Top row is full — highlight cell 0 of the next row (always has support from cell 0 below)
+        targetFloor = topRow + 1;
+        targetCell = 0;
       }
     }
   }
@@ -658,31 +657,49 @@ function drawLob(x, y, w) {
       if (((Math.floor((tx-x)/12)+Math.floor((ty-top)/12))%2)===0)
         ctx.fillStyle='#E8D8BC', ctx.fillRect(tx,ty,11,11);
   ctx.fillStyle='#D4AF37'; ctx.fillRect(x, top, w, 1);
-  // Concierge desk
-  ctx.fillStyle='#6B4226'; ctx.fillRect(x+60, bot-8, 28, 3);
-  ctx.fillStyle='#5B3216';
-  ctx.fillRect(x+63, bot-5, 2, 5);
-  ctx.fillRect(x+83, bot-5, 2, 5);
-  ctx.fillStyle='#2C3E50'; ctx.fillRect(x+70, bot-16, 10, 7);
-  ctx.fillStyle='#87CEEB'; ctx.fillRect(x+71, bot-15, 8, 5);
-  person(x+75, bot, 7);
-  drawPlant(x+20, bot, 8);
-  drawPlant(x+w-40, bot, 8);
-  sofa(x+140, bot);
-  sofa(x+w-120, bot);
-  ctx.fillStyle='#A0845C';
-  ctx.fillRect(x+150, bot+3, 12, 2);
-  ctx.fillRect(x+w-110, bot+3, 12, 2);
-  // Entrance doors
-  ctx.fillStyle='#8B6914';
-  ctx.fillRect(x+w-30, top, 2, FLOOR_H-4);
-  ctx.fillRect(x+w-4, top, 2, FLOOR_H-4);
-  ctx.fillStyle='#B8D4E8';
-  ctx.fillRect(x+w-28, top+2, 24, FLOOR_H-8);
-  // Directory
-  ctx.fillStyle='#4A4A5A'; ctx.fillRect(x+10, top+2, 30, 14);
-  ctx.fillStyle='#FFF';
-  for (let li=0; li<5; li++) ctx.fillRect(x+13, top+4+li*3, 20, 1);
+
+  // Only draw furniture if cell is wide enough
+  if (w >= 80) {
+    // Concierge desk (scaled to cell)
+    const deskX = x + Math.floor(w * 0.3);
+    ctx.fillStyle='#6B4226'; ctx.fillRect(deskX, bot-8, 20, 3);
+    ctx.fillStyle='#5B3216';
+    ctx.fillRect(deskX+2, bot-5, 2, 5);
+    ctx.fillRect(deskX+16, bot-5, 2, 5);
+    ctx.fillStyle='#2C3E50'; ctx.fillRect(deskX+4, bot-16, 12, 7);
+    ctx.fillStyle='#87CEEB'; ctx.fillRect(deskX+5, bot-15, 10, 5);
+  }
+  person(x + Math.floor(w/2), bot, 7);
+
+  // Plants only if wide enough
+  if (w >= 50) {
+    drawPlant(x + 14, bot, 6);
+  }
+  if (w >= 80) {
+    drawPlant(x + w - 14, bot, 6);
+  }
+
+  // Sofas only if cell is very wide (2+ cells merged)
+  if (w >= 160) {
+    sofa(x + 20, bot);
+    sofa(x + w - 40, bot);
+  }
+
+  // Entrance doors on right edge
+  if (w >= 30) {
+    ctx.fillStyle='#8B6914';
+    ctx.fillRect(x+w-10, top, 2, FLOOR_H-4);
+    ctx.fillRect(x+w-2, top, 2, FLOOR_H-4);
+    ctx.fillStyle='#B8D4E8';
+    ctx.fillRect(x+w-8, top+2, 6, FLOOR_H-8);
+  }
+
+  // Directory only if wide enough
+  if (w >= 50) {
+    ctx.fillStyle='#4A4A5A'; ctx.fillRect(x+6, top+2, 24, 12);
+    ctx.fillStyle='#FFF';
+    for (let li=0; li<4; li++) ctx.fillRect(x+9, top+4+li*3, 16, 1);
+  }
 }
 
 function drawStor(x, y, w) {
@@ -1017,8 +1034,8 @@ function handleCellClick(mx, my) {
 
   // Clicked above the highest floor — try to place in the next row
   const nextRow = towerGrid.length;
-  if (nextRow < MAX_FLOORS) {
-    // Check if click Y is within the next floor's space
+  if (nextRow < MAX_FLOORS && ci === 0) {
+    // Only allow placing cell 0 of a new row (must build up from the leftmost column)
     const nextY = getFloorY(nextRow);
     if (my >= nextY && my < nextY + FLOOR_H) {
       placeCell(nextRow, ci);
@@ -1030,12 +1047,22 @@ function handleCellClick(mx, my) {
    CELL PLACEMENT
    ═══════════════════════════════════════════════════ */
 
+function hasSupportBelow(floorIdx, cellIdx) {
+  if (floorIdx === 0) return true; // ground floor always has support
+  if (floorIdx >= towerGrid.length) return false;
+  const below = towerGrid[floorIdx - 1];
+  if (!below) return false;
+  // Cell directly below must be filled
+  return cellIdx < below.length && below[cellIdx] !== null;
+}
+
 function placeCell(floorIdx, cellIdx) {
   if (!selectedFloorType) return;
   if (towerGrid.length >= MAX_FLOORS && floorIdx >= towerGrid.length) return;
 
-  // Ground floor (row 0) can only be Lobby
+  // Ground floor (row 0) can only be Lobby; Lobby cannot be placed on upper floors
   if (floorIdx === 0 && selectedFloorType !== 'Lobby') return;
+  if (floorIdx > 0 && selectedFloorType === 'Lobby') return;
 
   ensureFloorRow(floorIdx);
   const cells = towerGrid[floorIdx];
@@ -1048,15 +1075,8 @@ function placeCell(floorIdx, cellIdx) {
     if (cells[c] === null) return;
   }
 
-  // Support check: row below must have a cell directly below or one column to the left
-  if (floorIdx > 0) {
-    const below = towerGrid[floorIdx - 1];
-    let hasSupport = false;
-    // Check the cell directly below, and one to its left
-    if (cellIdx < below.length && below[cellIdx] !== null) hasSupport = true;
-    if (cellIdx > 0 && cellIdx - 1 < below.length && below[cellIdx - 1] !== null) hasSupport = true;
-    if (!hasSupport) return;
-  }
+  // Support check
+  if (!hasSupportBelow(floorIdx, cellIdx)) return;
 
   // Place the cell
   cells[cellIdx] = selectedFloorType;
