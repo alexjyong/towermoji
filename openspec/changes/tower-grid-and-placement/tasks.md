@@ -62,11 +62,11 @@
 
 ## 8. Integration and Testing
 
-- [ ] 8.1 Verify in browser: Lobby renders at ground with all cells, toolbar shows all 9 types
-- [ ] 8.2 Verify: clicking a toolbar type selects it, clicking the highlighted cell above Lobby places it
-- [ ] 8.3 Verify: mixed floors work (e.g., Residential cell + Restaurant cell on same row)
-- [ ] 8.4 Verify: left-to-right constraint prevents skipping cells
-- [ ] 8.5 Verify: clicking Lobby or occupied cells does nothing
-- [ ] 8.6 Verify: clicking beyond max height does nothing
-- [ ] 8.7 Verify: clicking without a type selected does nothing
-- [ ] 8.8 Create `test/grid-preview.html` with a pre-built sample tower for visual inspection
+- [x] 8.1 Verify in browser: Lobby renders at ground with all cells, toolbar shows all 9 types
+- [x] 8.2 Verify: clicking a toolbar type selects it, clicking the highlighted cell above Lobby places it
+- [x] 8.3 Verify: mixed floors work (e.g., Residential cell + Restaurant cell on same row)
+- [x] 8.4 Verify: left-to-right constraint prevents skipping cells
+- [x] 8.5 Verify: clicking Lobby or occupied cells does nothing
+- [x] 8.6 Verify: clicking beyond max height does nothing
+- [x] 8.7 Verify: clicking without a type selected does nothing
+- [x] 8.8 Create `test/grid-preview.html` with a pre-built sample tower for visual inspection

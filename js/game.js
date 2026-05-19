@@ -171,7 +171,6 @@ function drawGround() {
 
 function drawTowerGrid() {
   const n = towerGrid.length;
-  if (n === 0) return;
 
   // Find the highest floor that has at least one cell
   let highestFloor = -1;
@@ -180,6 +179,10 @@ function drawTowerGrid() {
       highestFloor = fi;
     }
   }
+
+  // Always draw the placement highlight — even on an empty lot
+  drawPlacementHighlight();
+
   if (highestFloor < 0) return;
   const top = getFloorY(highestFloor);
 
@@ -195,9 +198,6 @@ function drawTowerGrid() {
       drawTowerFloor(y, dominant, floorNum, cells);
     }
   }
-
-  // Highlight the next valid placement target
-  drawPlacementHighlight();
 
   drawTowerFrame(top);
 }
@@ -349,14 +349,115 @@ function drawPlacementHighlight() {
     }
   }
 
-  if (targetFloor >= 0 && targetCell >= 0) {
-    const cr = getCellRect(targetFloor, targetCell);
-    ctx.strokeStyle = '#FFD70088';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2);
-    ctx.setLineDash([]);
+  if (targetFloor < 0 || targetCell < 0) return;
+
+  if (towerGrid.length === 0) {
+    // Empty lot — draw a full ghost preview of the ground floor so the player can see
+    // exactly where the tower will start (label col, stairs, elevator, interior cells).
+    drawEmptyLotPreview(targetFloor, targetCell);
+    return;
   }
+
+  // Normal highlight for rows that already exist
+  const cr = getCellRect(targetFloor, targetCell);
+  ctx.strokeStyle = '#FFD70088';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(cr.x + 1, cr.y + 1, cr.w - 2, cr.h - 2);
+  ctx.setLineDash([]);
+}
+
+function drawEmptyLotPreview(targetFloor, targetCell) {
+  const y = getFloorY(targetFloor);
+  const lobby = FLOOR_TYPES.find(f => f.name === 'Lobby');
+  const alpha = 0.35;
+
+  // Foundation outline on the ground — shows the full tower footprint
+  ctx.strokeStyle = `rgba(255,215,0,${alpha})`;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  // Span from left edge to the right staircase
+  const fullRight = CANVAS_W - STAIR_W - 2;
+  ctx.strokeRect(0, y, fullRight, FLOOR_H);
+  ctx.setLineDash([]);
+
+  // Ghost label column
+  ctx.fillStyle = `rgba(26,26,42,${alpha})`;
+  ctx.fillRect(0, y, LABEL_W, FLOOR_H);
+  ctx.fillStyle = `rgba(170,187,204,${alpha})`;
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('1', LABEL_W / 2, y + FLOOR_H / 2);
+
+  // Ghost left staircase
+  drawGhostStairs(LABEL_W, y, false, alpha);
+
+  // Ghost elevator shaft
+  drawGhostElevator(y, alpha);
+
+  // Ghost interior cells — draw all 5 cells so the player sees the full placement area
+  for (let ci = 0; ci < GRID_COLS; ci++) {
+    const cellX = INTERIOR_X + ci * CELL_W;
+    // Filled background for the cell
+    ctx.fillStyle = `rgba(${hexToRgb(lobby.wall).join(',')},${alpha * 0.5})`;
+    ctx.fillRect(cellX, y + 2, CELL_W, FLOOR_H - 4);
+
+    // Cell border
+    ctx.strokeStyle = `rgba(255,215,0,${ci === targetCell ? 0.8 : alpha * 0.5})`;
+    ctx.lineWidth = ci === targetCell ? 2 : 1;
+    if (ci === targetCell) ctx.setLineDash([4, 4]);
+    ctx.strokeRect(cellX + 1, y + 3, CELL_W - 2, FLOOR_H - 6);
+    ctx.setLineDash([]);
+
+    // Emoji hint on the target cell — ground floor must be Lobby
+    if (ci === targetCell) {
+      ctx.globalAlpha = 0.7;
+      ctx.font = '20px serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(lobby.emoji, cellX + CELL_W / 2, y + FLOOR_H / 2);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  // Ghost right staircase
+  drawGhostStairs(CANVAS_W - STAIR_W, y, true, alpha);
+
+  // Floor beams
+  ctx.fillStyle = `rgba(45,45,45,${alpha})`;
+  ctx.fillRect(0, y, fullRight, 2);
+  ctx.fillRect(0, y + FLOOR_H - 2, fullRight, 2);
+
+  // "Click to place" hint above the floor — dark text with white stroke for readability
+  ctx.fillStyle = '#1A1A2A';
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.strokeText('click here to place Lobby', INTERIOR_X + CELL_W / 2, y - 6);
+  ctx.fillText('click here to place Lobby', INTERIOR_X + CELL_W / 2, y - 6);
+  ctx.lineWidth = 1;
+}
+
+function drawGhostStairs(x, y, right, alpha) {
+  ctx.fillStyle = `rgba(74,74,90,${alpha})`;
+  ctx.fillRect(x, y, STAIR_W, FLOOR_H);
+}
+
+function drawGhostElevator(y, alpha) {
+  ctx.fillStyle = `rgba(26,26,40,${alpha})`;
+  ctx.fillRect(SHAFT_X, y + 2, SHAFT_W, FLOOR_H - 4);
+  ctx.fillStyle = `rgba(90,90,106,${alpha})`;
+  ctx.fillRect(SHAFT_X - 2, y + 2, 2, FLOOR_H - 4);
+  ctx.fillRect(SHAFT_X + SHAFT_W, y + 2, 2, FLOOR_H - 4);
+}
+
+function hexToRgb(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return [r, g, b];
 }
 
 function drawStairs(x, y, right) {
@@ -1010,18 +1111,19 @@ function handleToolbarClick(mx, my) {
 }
 
 function handleCellClick(mx, my) {
-  if (!selectedFloorType) return;
-
   // Determine cell column from X position
   const ci = Math.floor((mx - INTERIOR_X) / CELL_W);
   if (ci < 0 || ci >= GRID_COLS) return;
 
   if (towerGrid.length === 0) {
-    // First ever placement — create ground floor
+    // First ever placement — auto-select Lobby (ground floor rule) and place cell 0
+    selectedFloorType = 'Lobby';
     ensureFloorRow(0);
     placeCell(0, 0);
     return;
   }
+
+  if (!selectedFloorType) return;
 
   // Find which floor row was clicked
   for (let fi = 0; fi < towerGrid.length; fi++) {
