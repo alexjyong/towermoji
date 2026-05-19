@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Floor Preview — Towermoji (SimTower Style)</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    body { flex-direction: column; padding-bottom: 2rem; }
+    .label {
+      color: #888;
+      font-family: monospace;
+      text-align: center;
+      margin-top: 0.5rem;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div class="label">Floor Preview — all 9 types + unfinished | SimTower/Kairosoft cross-section style</div>
+  <script>window.preview = 1;</script>
+  <script src="../js/game.js"></script>
+  <script>
+    // All floor types top → bottom (index 0 = top of screen, last = ground floor)
+    const previewFloors = [
+      'Rooftop Garden',
+      'Entertainment',
+      'Gym',
+      'Storage',
+      'Retail',
+      'Restaurant',
+      'Office',
+      'Residential',
+      'Lobby',
+    ];
+
+    function drawLegend(x, startY) {
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.font = '9px monospace';
+      FLOOR_TYPES.forEach((t, i) => {
+        const y = startY + i * 14;
+        ctx.fillStyle = t.wall;
+        ctx.fillRect(x, y - 4, 8, 8);
+        ctx.strokeStyle = '#FFFFFF44';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y - 4, 8, 8);
+        ctx.fillStyle = '#CCCCCC';
+        ctx.fillText(`${t.emoji} ${t.name}`, x + 12, y);
+      });
+      // Unfinished
+      const y = startY + FLOOR_TYPES.length * 14;
+      ctx.fillStyle = COLORS.unfinished;
+      ctx.fillRect(x, y - 4, 8, 8);
+      ctx.strokeStyle = '#FFFFFF44';
+      ctx.strokeRect(x, y - 4, 8, 8);
+      ctx.fillStyle = '#CCCCCC';
+      ctx.fillText(`  Unfinished`, x + 12, y);
+    }
+
+    function renderFloorPreview() {
+      renderBackground();
+
+      const n = previewFloors.length;
+      const top = GROUND_Y - n * FLOOR_H;
+
+      for (let i = 0; i < n; i++) {
+        const y = top + i * FLOOR_H;
+        const floorNum = n - i; // ground floor = 1, top = n
+        drawTowerFloor(y, previewFloors[i], floorNum);
+      }
+      drawTowerFrame(top);
+
+      drawLegend(CANVAS_W - 120, 10);
+    }
+
+    renderFloorPreview();
+  </script>
+</body>
+</html>

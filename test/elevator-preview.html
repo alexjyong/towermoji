@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Elevator Preview — Towermoji (SimTower Style)</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    body { flex-direction: column; padding-bottom: 2rem; }
+    .label {
+      color: #888;
+      font-family: monospace;
+      text-align: center;
+      margin-top: 0.5rem;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div class="label">Elevator Preview — shaft integrated into SimTower-style tower</div>
+  <script>window.preview = 1;</script>
+  <script src="../js/game.js"></script>
+  <script>
+    // Floors top → bottom (index 0 = top of screen, last = ground floor)
+    const previewFloors = [
+      'Rooftop Garden',
+      'Entertainment',
+      'Gym',
+      null,                 // unfinished
+      'Restaurant',
+      'Retail',
+      'Office',
+      'Residential',
+      'Lobby',
+    ];
+
+    function renderElevatorPreview() {
+      renderBackground();
+
+      const n = previewFloors.length;
+      const top = GROUND_Y - n * FLOOR_H;
+
+      for (let i = 0; i < n; i++) {
+        const y = top + i * FLOOR_H;
+        const floorNum = n - i; // ground floor = 1, top = n
+        drawTowerFloor(y, previewFloors[i], floorNum);
+      }
+      drawTowerFrame(top);
+
+      // Title
+      ctx.fillStyle = '#FFFFFFCC';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`🛗 Elevator + Tower Preview`, CANVAS_W - 8, 16);
+      ctx.fillText(`${n} floors | ${SHAFT_W}px shaft`, CANVAS_W - 8, 30);
+    }
+
+    renderElevatorPreview();
+  </script>
+</body>
+</html>
