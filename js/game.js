@@ -96,6 +96,295 @@ const SHOPS = [
 const PEOPLE_EMOJI = ['🚶','🚶‍♀️','🚶‍♂️','🚶','🚶‍♀️','🚶‍♂️','🧍','🧍‍♀️','🧍‍♂️','🚶‍♀️','🚶‍♂️','🧍','🚶'];
 
 /* ═══════════════════════════════════════════════════
+   GAME LOOP
+   ═══════════════════════════════════════════════════ */
+
+let gameRunning = false;
+let lastFrameTime = 0;
+const FRAME_INTERVAL = 33; // ~30fps
+
+function hasTowerContent() {
+  return towerGrid.some(row => row && row.some(c => c !== null));
+}
+
+function tryStartGameLoop() {
+  if (typeof window.preview !== 'undefined') return;
+  if (gameRunning) return;
+  if (!hasTowerContent()) return;
+  gameRunning = true;
+  lastFrameTime = 0;
+  // Reset elevator to ground floor and pick a target
+  elevator.currentFloor = 0;
+  elevator.targetFloor = -1;
+  elevator.doorState = ELEV_CLOSED;
+  elevator.doorTimer = 0;
+  elevator.doorOpen = 0;
+  elevator.idleTimer = 30 + Math.random() * 30;
+  requestAnimationFrame(gameLoop);
+}
+
+/* ═══════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ═══════════════════════════════════════════════════ */
+
+let toastMsg = '';
+let toastTimer = 0;
+const TOAST_DURATION = 180; // ~6 seconds at 30fps
+
+function showToast(msg) {
+  toastMsg = msg;
+  toastTimer = TOAST_DURATION;
+}
+
+function updateToast() {
+  if (toastTimer > 0) toastTimer--;
+}
+
+function drawToast() {
+  if (toastTimer <= 0 || !toastMsg) return;
+  const alpha = Math.min(1, toastTimer / 20); // fade in over ~0.7s
+  const fadeAlpha = toastTimer < 30 ? toastTimer / 30 : alpha; // fade out last 1s
+
+  ctx.save();
+  ctx.globalAlpha = fadeAlpha;
+
+  const textW = ctx.measureText(toastMsg).width;
+  // Use a default font size to measure
+  ctx.font = '12px monospace';
+  const measured = ctx.measureText(toastMsg).width;
+  const pad = 16;
+  const boxW = measured + pad * 2;
+  const boxH = 28;
+  const boxX = (CANVAS_W - boxW) / 2;
+  const boxY = 8;
+
+  // Background
+  ctx.fillStyle = '#1A1A2ACC';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#FF6B6B';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  // Icon + text
+  ctx.fillStyle = '#FF6B6B';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`⚠ ${toastMsg}`, CANVAS_W / 2, boxY + boxH / 2);
+
+  ctx.restore();
+}
+
+function gameLoop(timestamp) {
+  if (!gameRunning) return;
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  const delta = timestamp - lastFrameTime;
+  if (delta >= FRAME_INTERVAL) {
+    lastFrameTime = timestamp - (delta % FRAME_INTERVAL);
+    updateAnimations();
+    renderAll();
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+function updateAnimations() {
+  // Each frame: update people, elevator, clouds, AC puffs, toast, sounds
+  updatePeople();
+  updateElevator();
+  updateClouds();
+  updateWindowLights();
+  updateACPuffs();
+  updateToast();
+  updateTowerHum();
+}
+
+/* ═══════════════════════════════════════════════════
+   PERSON ENTITIES & MOVEMENT
+   ═══════════════════════════════════════════════════ */
+
+const people = [];
+const MAX_PEOPLE = 30;
+
+const PERSON_WALKING = 'WALKING';
+const PERSON_PAUSED  = 'PAUSED';
+const PERSON_STAIRS  = 'USING_STAIRS';
+
+// Skin tone modifiers (Fitzpatrick scale) — empty string = default/no modifier
+const SKIN_TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
+
+// Base person emoji sets — simple compact emoji only (ZWJ sequences render too large)
+const WALK_BASE   = ['🚶', '🚶', '🚶', '🚶', '🚶'];  // generic walkers — skin tone adds variety
+const PAUSE_BASE  = ['🧍', '🧍', '🧍', '🧍', '🧍'];
+
+// Apply a skin tone modifier to a person emoji
+function applySkinTone(emoji, tone) {
+  if (!tone) return emoji;
+  return emoji + tone;
+}
+
+function pickPersonPair() {
+  const bi = Math.floor(Math.random() * WALK_BASE.length);
+  const ti = Math.floor(Math.random() * SKIN_TONES.length);
+  const tone = SKIN_TONES[ti];
+  return {
+    walkEmoji: applySkinTone(WALK_BASE[bi], tone),
+    pauseEmoji: applySkinTone(PAUSE_BASE[bi], tone),
+  };
+}
+
+function spawnPerson(floorIdx) {
+  if (people.length >= MAX_PEOPLE) return;
+  if (!towerGrid[floorIdx]) return;
+
+  // Pick a random X within the floor's interior zone
+  const floorCells = towerGrid[floorIdx];
+  let placedCount = 0;
+  for (let ci = 0; ci < GRID_COLS; ci++) {
+    if (floorCells[ci] !== null) placedCount++;
+    else break;
+  }
+  if (placedCount === 0) return;
+
+  const rightEdge = INTERIOR_X + placedCount * CELL_W;
+  const x = INTERIOR_X + 10 + Math.random() * (rightEdge - INTERIOR_X - 20);
+  const dir = Math.random() < 0.5 ? 1 : -1;
+  const pair = pickPersonPair();
+  people.push({
+    x,
+    floorIdx,
+    direction: dir,
+    speed: 0.4 + Math.random() * 0.4, // pixels per frame at 30fps
+    state: PERSON_WALKING,
+    timer: 60 + Math.random() * 120,  // frames until next state change
+    walkEmoji: pair.walkEmoji,
+    pauseEmoji: pair.pauseEmoji,
+    emoji: pair.walkEmoji,
+  });
+}
+
+function updatePeople() {
+  for (let i = people.length - 1; i >= 0; i--) {
+    const p = people[i];
+
+    // Verify person's floor still exists
+    if (!towerGrid[p.floorIdx] || !towerGrid[p.floorIdx].some(c => c !== null)) {
+      people.splice(i, 1);
+      continue;
+    }
+
+    // Determine the interior bounds for this person's floor
+    const floorCells = towerGrid[p.floorIdx];
+    let placedCount = 0;
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (floorCells[ci] !== null) placedCount++;
+      else break;
+    }
+    const leftEdge  = INTERIOR_X + 4;
+    const rightEdge = INTERIOR_X + placedCount * CELL_W - 4;
+
+    if (p.state === PERSON_WALKING) {
+      p.x += p.speed * p.direction;
+
+      // Bounce off edges
+      if (p.x >= rightEdge) { p.x = rightEdge; p.direction = -1; }
+      if (p.x <= leftEdge)  { p.x = leftEdge;  p.direction = 1;  }
+
+      p.emoji = p.walkEmoji;
+
+      // Random footstep — ~1% per second per person
+      if (Math.random() < 0.00033) {
+        playFootstep();
+      }
+
+      p.timer--;
+
+      if (p.timer <= 0) {
+        // Randomly pause or try stairs
+        if (Math.random() < 0.3) {
+          p.state = PERSON_STAIRS;
+          p.timer = 20 + Math.random() * 20; // frames before moving
+        } else {
+          p.state = PERSON_PAUSED;
+          p.timer = 30 + Math.random() * 60;
+        }
+      }
+
+    } else if (p.state === PERSON_PAUSED) {
+      p.emoji = p.pauseEmoji;
+      p.timer--;
+
+      if (p.timer <= 0) {
+        p.state = PERSON_WALKING;
+        p.timer = 60 + Math.random() * 120;
+        p.direction = Math.random() < 0.5 ? 1 : -1;
+      }
+
+    } else if (p.state === PERSON_STAIRS) {
+      p.emoji = p.walkEmoji;
+      p.timer--;
+
+      if (p.timer <= 0) {
+        // Try to move up, then down
+        let targetFloor = -1;
+        // Prefer going up if there's a floor above with cells
+        if (p.floorIdx + 1 < towerGrid.length && towerGrid[p.floorIdx + 1].some(c => c !== null)) {
+          targetFloor = p.floorIdx + 1;
+        }
+        // Try going down if not on ground floor
+        else if (p.floorIdx > 0 && towerGrid[p.floorIdx - 1].some(c => c !== null)) {
+          targetFloor = p.floorIdx - 1;
+        }
+
+        if (targetFloor >= 0) {
+          // Move to new floor
+          const newCells = towerGrid[targetFloor];
+          let newCount = 0;
+          for (let ci = 0; ci < GRID_COLS; ci++) {
+            if (newCells[ci] !== null) newCount++;
+            else break;
+          }
+          if (newCount > 0) {
+            p.floorIdx = targetFloor;
+            const newLeft  = INTERIOR_X + 4;
+            const newRight = INTERIOR_X + newCount * CELL_W - 4;
+            p.x = newLeft + Math.random() * (newRight - newLeft);
+          }
+        }
+
+        p.state = PERSON_WALKING;
+        p.timer = 60 + Math.random() * 120;
+        p.direction = Math.random() < 0.5 ? 1 : -1;
+      }
+    }
+  }
+}
+
+/** Draw all people on their floors. Called from drawTowerFloor. */
+function drawPeopleOnFloor(floorIdx) {
+  const y = getFloorY(floorIdx);
+  const bot = y + FLOOR_H - 4;
+  ctx.font = '14px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  for (let i = 0; i < people.length; i++) {
+    const p = people[i];
+    if (p.floorIdx !== floorIdx) continue;
+
+    if (p.direction > 0) {
+      // Flip emoji horizontally for rightward walking
+      ctx.save();
+      ctx.translate(p.x, 0);
+      ctx.scale(-1, 1);
+      ctx.fillText(p.emoji, 0, bot + 1);
+      ctx.restore();
+    } else {
+      ctx.fillText(p.emoji, p.x, bot + 1);
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════
    BACKGROUND
    ═══════════════════════════════════════════════════ */
 
@@ -200,6 +489,14 @@ function drawTowerGrid() {
   }
 
   drawTowerFrame(top);
+
+  // Draw animated elevator car on top of all shafts
+  if (gameRunning) {
+    const cf = elevator.currentFloor;
+    if (cf >= 0 && Math.ceil(cf) <= highestFloor) {
+      drawElevatorCar(0, elevator.doorOpen, cf);
+    }
+  }
 }
 
 function drawTower(floorList) {
@@ -279,6 +576,11 @@ function drawTowerFloor(y, name, idx, cells) {
     ctx.fillRect(0, y, builtRight, 2);
     ctx.fillRect(0, y + FLOOR_H - 2, builtRight, 2);
   }
+
+  // Draw dynamic people on this floor (game-loop mode)
+  if (hasAnyCell && gameRunning) {
+    drawPeopleOnFloor(idx - 1);
+  }
 }
 
 function drawTowerFrame(top) {
@@ -295,6 +597,18 @@ function drawTowerFrame(top) {
   }
   const frameRight = INTERIOR_X + maxPlaced * CELL_W;
 
+  // Roof beam width: only span as wide as the topmost occupied floor
+  const topFloorIdx = towerGrid.length - 1;
+  let topFloorWidth = 0;
+  if (topFloorIdx >= 0 && towerGrid[topFloorIdx]) {
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[topFloorIdx][ci] !== null) topFloorWidth++;
+      else break;
+    }
+  }
+  if (topFloorWidth === 0) topFloorWidth = maxPlaced; // fallback
+  const roofRight = INTERIOR_X + topFloorWidth * CELL_W;
+
   // Left structural beam — stop before the label column so numbers show through
   ctx.fillStyle = '#2D2D3D';
   ctx.fillRect(LABEL_W + 1, top, STAIR_W + 4, bot - top + 4);
@@ -302,13 +616,16 @@ function drawTowerFrame(top) {
   if (maxPlaced === GRID_COLS) {
     ctx.fillRect(CANVAS_W - STAIR_W - 2, top, STAIR_W + 2, bot - top + 4);
   }
-  // Roof beam
+  // Roof beam — only spans the topmost floor's width
   ctx.fillStyle = '#3D3D4D';
-  ctx.fillRect(0, top - 4, frameRight, 6);
-  // AC unit on roof
-  ctx.fillStyle = '#6A6A7A';
-  ctx.fillRect(300, top - 18, 20, 14);
-  ctx.fillRect(306, top - 22, 8, 4);
+  ctx.fillRect(0, top - 4, roofRight, 6);
+  // AC unit on roof — only if roof is wide enough, positioned relative to roof edge
+  if (roofRight > INTERIOR_X + CELL_W * 2) {
+    ctx.fillStyle = '#6A6A7A';
+    const acX = INTERIOR_X + CELL_W + 10;
+    ctx.fillRect(acX, top - 18, 20, 14);
+    ctx.fillRect(acX + 6, top - 22, 8, 4);
+  }
   // Ground beam
   ctx.fillStyle = '#3D3D4D';
   ctx.fillRect(0, bot - 2, frameRight, 4);
@@ -478,6 +795,7 @@ function drawStairs(x, y, right) {
 }
 
 function drawElevator(y) {
+  // Draw shaft background per floor (no car — car is drawn separately)
   ctx.fillStyle = '#1A1A28';
   ctx.fillRect(SHAFT_X, y + 2, SHAFT_W, FLOOR_H - 4);
   ctx.fillStyle = '#5A5A6A';
@@ -486,17 +804,47 @@ function drawElevator(y) {
   ctx.fillStyle = '#7A7A8A';
   ctx.fillRect(SHAFT_X, y + 4, SHAFT_W, 2);
   ctx.fillRect(SHAFT_X, y + FLOOR_H - 6, SHAFT_W, 2);
-  const dh = FLOOR_H - 12;
+}
+
+function drawElevatorCar(_baseFloorIdx, doorOpenAmount, currentFloatFloor) {
+  // Draw the animated elevator car at its current position.
+  // currentFloatFloor: float position (e.g. 0.7 = 70% from floor 0 to floor 1)
+  // We always use floor 0 as anchor to avoid discontinuity at integer boundaries.
+  const floatFloor = currentFloatFloor !== undefined ? currentFloatFloor : elevator.currentFloor;
+  const baseY = getFloorY(0);
+  const carY = baseY - floatFloor * FLOOR_H + 6;
+  const carH = FLOOR_H - 12;
+
+  // Car interior
+  ctx.fillStyle = '#3A3A4A';
+  ctx.fillRect(SHAFT_X + 1, carY, SHAFT_W - 2, carH);
+
+  // Sliding doors
+  const halfW = Math.floor(SHAFT_W / 2) - 1;
+  const doorSlide = Math.floor(halfW * doorOpenAmount);
+
   ctx.fillStyle = '#A0A0B0';
-  ctx.fillRect(SHAFT_X + 1, y + 6, Math.floor(SHAFT_W/2) - 1, dh);
-  ctx.fillRect(SHAFT_X + Math.floor(SHAFT_W/2), y + 6, SHAFT_W - Math.floor(SHAFT_W/2) - 1, dh);
+  ctx.fillRect(SHAFT_X + 1, carY, halfW - doorSlide, carH);
+  ctx.fillRect(SHAFT_X + Math.floor(SHAFT_W / 2), carY, halfW - doorSlide, carH);
+
+  // Door center seam
   ctx.fillStyle = '#808090';
-  ctx.fillRect(SHAFT_X + SHAFT_W/2, y + 6, 1, dh);
+  ctx.fillRect(SHAFT_X + SHAFT_W / 2, carY, 1, carH);
+
+  // Door handles
   ctx.fillStyle = '#C0C0D0';
-  ctx.fillRect(SHAFT_X + SHAFT_W/2 - 3, y + FLOOR_H/2 - 1, 1, 4);
-  ctx.fillRect(SHAFT_X + SHAFT_W/2 + 2, y + FLOOR_H/2 - 1, 1, 4);
-  ctx.fillStyle = '#44FF44';
-  ctx.fillRect(SHAFT_X + SHAFT_W/2 - 1, y + 3, 2, 2);
+  ctx.fillRect(SHAFT_X + SHAFT_W / 2 - 3, carY + carH / 2 - 1, 1, 4);
+  ctx.fillRect(SHAFT_X + SHAFT_W / 2 + 2, carY + carH / 2 - 1, 1, 4);
+
+  // Indicator light (above the car)
+  let lightColor = '#44FF44';
+  if (doorOpenAmount > 0) {
+    lightColor = '#FFD700';
+  } else if (Math.abs(elevator.currentFloor - Math.round(elevator.currentFloor)) > ELEV_SNAP) {
+    lightColor = '#FF4444';
+  }
+  ctx.fillStyle = lightColor;
+  ctx.fillRect(SHAFT_X + SHAFT_W / 2 - 1, carY - 3, 2, 2);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -570,8 +918,6 @@ function drawRes(x, y, w, idx) {
     ctx.fillRect(ux + 35, top + 3, 6, 4);
     ctx.fillStyle = '#4A7A4A';
     ctx.fillRect(ux + 36, top + 4, 2, 2);
-    // Person
-    person(ux + 20, bot, idx*3+1);
     ux += uW;
   }
   drawWin(x+w-28, y+8, 22, 10);
@@ -603,7 +949,6 @@ function drawOff(x, y, w) {
     ctx.fillStyle = '#3A3A4A';
     ctx.fillRect(dx+5, bot+3, 2, 1);
     ctx.fillRect(dx+11, bot+3, 2, 1);
-    person(dx+16, bot, dx%5);
   }
   ctx.fillStyle = '#8A8A9A';
   ctx.fillRect(x+w-40, bot-14, 12, 12);
@@ -655,8 +1000,6 @@ function drawRest(x, y, w, idx) {
     ctx.fillStyle = '#FFF';
     ctx.fillRect(tx+4, bot-8, 4, 2);
   }
-  person(x+30, bot, 7);
-  person(split-30, bot, 8);
   // Shop facade right side
   drawShop(split, y, x+w-split, idx);
 }
@@ -675,7 +1018,6 @@ function drawRet(x, y, w, idx) {
   ctx.fillStyle = '#555';
   ctx.fillRect(split-49, bot, 1, 1);
   ctx.fillRect(split-44, bot, 1, 1);
-  person(split-30, bot, 9);
   drawShop(split, y, x+w-split, idx+3);
 }
 
@@ -717,8 +1059,6 @@ function drawEnt(x, y, w) {
   ctx.fillRect(x+w-57, bot-18, 10, 1);
   ctx.fillRect(x+w-57, bot-15, 10, 1);
   ctx.fillRect(x+w-57, bot-12, 10, 1);
-  // People
-  for (let px=x+20; px<x+w-70; px+=30) person(px, bot, Math.floor((px-x)/30));
 }
 
 function drawGymFn(x, y, w) {
@@ -732,7 +1072,6 @@ function drawGymFn(x, y, w) {
     ctx.fillStyle='#666'; ctx.fillRect(gx+24, bot-16, 2, 13);
     ctx.fillStyle='#2ECC71'; ctx.fillRect(gx+20, bot-18, 8, 2);
     ctx.fillStyle='#555'; ctx.fillRect(gx+24, bot-14, 1, 7);
-    person(gx+12, bot, gx%4+2);
   }
   ctx.fillStyle='#555';
   ctx.fillRect(x+w-40, bot-16, 2, 14);
@@ -770,7 +1109,6 @@ function drawLob(x, y, w) {
     ctx.fillStyle='#2C3E50'; ctx.fillRect(deskX+4, bot-16, 12, 7);
     ctx.fillStyle='#87CEEB'; ctx.fillRect(deskX+5, bot-15, 10, 5);
   }
-  person(x + Math.floor(w/2), bot, 7);
 
   // Plants only if wide enough
   if (w >= 50) {
@@ -827,7 +1165,6 @@ function drawStor(x, y, w) {
     ctx.fillStyle=pc[r*3+c]; ctx.fillRect(x+w-38+c*3, bot-16+r*3, 2, 2);
   }
   ctx.fillStyle='#333'; ctx.fillRect(x+w-38, bot-5, 8, 2);
-  person(x+100, bot, 9);
 }
 
 function drawRoof(x, y, w) {
@@ -1029,6 +1366,42 @@ function drawToolbar() {
     ctx.fillStyle = isSelected ? '#FFD700' : '#AAA';
     ctx.fillText(ft.name, bx + btnW / 2, by + bh / 2 + 12);
   });
+
+  // Sound toggle button — pinned to the right edge of toolbar
+  const sndW = 40;
+  const sndX = CANVAS_W - sndW - 4;
+  ctx.fillStyle = '#2A2A3A';
+  ctx.fillRect(sndX, by, sndW, bh);
+  ctx.strokeStyle = soundEnabled ? '#FFD700' : '#666';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sndX + 1, by + 1, sndW - 2, bh - 2);
+  ctx.font = '20px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = soundEnabled ? '#FFF' : '#666';
+  ctx.fillText(soundEnabled ? '🔊' : '🔇', sndX + sndW / 2, by + bh / 2);
+}
+
+// Sound button in upper-right corner (outside toolbar)
+const SND_BTN_SIZE = 36;
+const SND_BTN_X = CANVAS_W - SND_BTN_SIZE - 6;
+const SND_BTN_Y = 6;
+
+function drawSoundButton() {
+  const sx = SND_BTN_X;
+  const sy = SND_BTN_Y;
+  const ss = SND_BTN_SIZE;
+
+  ctx.fillStyle = 'rgba(26,26,42,0.85)';
+  ctx.fillRect(sx, sy, ss, ss);
+  ctx.strokeStyle = soundEnabled ? '#FFD700' : '#666';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx + 1, sy + 1, ss - 2, ss - 2);
+  ctx.font = '20px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = soundEnabled ? '#FFF' : '#666';
+  ctx.fillText(soundEnabled ? '🔊' : '🔇', sx + ss / 2, sy + ss / 2);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1045,7 +1418,10 @@ function renderBackground() {
 function renderAll() {
   renderBackground();
   drawTowerGrid();
+  drawACPuffs();
   drawToolbar();
+  drawSoundButton();
+  drawToast();
 }
 
 // Default floor stack for preview — matches SimTower style
@@ -1068,6 +1444,8 @@ if (typeof window.preview !== 'undefined') {
   document.addEventListener('DOMContentLoaded', () => {
     renderAll();
     setupClickHandler();
+    // Start game loop if tower already has content (e.g., from a pre-built state)
+    tryStartGameLoop();
   });
 }
 
@@ -1077,11 +1455,22 @@ if (typeof window.preview !== 'undefined') {
 
 function setupClickHandler() {
   canvas.addEventListener('click', (e) => {
+    // Initialize audio on first user interaction
+    initAudio();
+
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
+
+    // Check sound button (upper-right corner) first — before toolbar
+    if (mx >= SND_BTN_X && mx < SND_BTN_X + SND_BTN_SIZE &&
+        my >= SND_BTN_Y && my < SND_BTN_Y + SND_BTN_SIZE) {
+      toggleSound();
+      renderAll();
+      return;
+    }
 
     // Check toolbar click
     if (my >= TOOLBAR_Y) {
@@ -1095,6 +1484,15 @@ function setupClickHandler() {
 }
 
 function handleToolbarClick(mx, my) {
+  // Check sound toggle button (upper-right corner)
+  if (mx >= SND_BTN_X && mx < SND_BTN_X + SND_BTN_SIZE &&
+      my >= SND_BTN_Y && my < SND_BTN_Y + SND_BTN_SIZE) {
+    toggleSound();
+    renderAll();
+    return;
+  }
+
+  // Check toolbar sound button (legacy location)
   const pad = 6;
   const btnCount = FLOOR_TYPES.length;
   const totalPad = pad * (btnCount + 1);
@@ -1163,8 +1561,14 @@ function placeCell(floorIdx, cellIdx) {
   if (towerGrid.length >= MAX_FLOORS && floorIdx >= towerGrid.length) return;
 
   // Ground floor (row 0) can only be Lobby; Lobby cannot be placed on upper floors
-  if (floorIdx === 0 && selectedFloorType !== 'Lobby') return;
-  if (floorIdx > 0 && selectedFloorType === 'Lobby') return;
+  if (floorIdx === 0 && selectedFloorType !== 'Lobby') {
+    showToast('Only Lobby can be placed on the first floor');
+    return;
+  }
+  if (floorIdx > 0 && selectedFloorType === 'Lobby') {
+    showToast('Lobby can only be placed on the first floor');
+    return;
+  }
 
   ensureFloorRow(floorIdx);
   const cells = towerGrid[floorIdx];
@@ -1183,6 +1587,15 @@ function placeCell(floorIdx, cellIdx) {
   // Place the cell
   cells[cellIdx] = selectedFloorType;
 
+  // Spawn a person for this floor
+  spawnPerson(floorIdx);
+
+  // Play placement sound
+  playPlacementThud();
+
+  // Start the game loop if this is the first cell placed
+  tryStartGameLoop();
+
   // Flash animation
   flashCell(floorIdx, cellIdx);
 }
@@ -1197,4 +1610,476 @@ function flashCell(floorIdx, cellIdx) {
   setTimeout(() => {
     renderAll();
   }, 150);
+}
+
+/* ═══════════════════════════════════════════════════
+   AC UNIT ANIMATION
+   ═══════════════════════════════════════════════════ */
+
+const acPuffs = [];   // { x, y, vx, vy, life }
+let acPuffTimer = 0;
+
+function updateACPuffs() {
+  // Spawn a new puff every ~40 frames (every ~1.3s at 30fps)
+  acPuffTimer++;
+  if (acPuffTimer >= 40) {
+    acPuffTimer = 0;
+    const roofRight = computeRoofRight();
+    if (roofRight > INTERIOR_X + CELL_W * 2) {
+      const acX = INTERIOR_X + CELL_W + 10;
+      // Find highest occupied floor to compute the roof Y
+      let highestFloor = -1;
+      for (let fi = towerGrid.length - 1; fi >= 0; fi--) {
+        if (towerGrid[fi] && towerGrid[fi].some(c => c !== null)) {
+          highestFloor = fi;
+          break;
+        }
+      }
+      if (highestFloor < 0) return;
+      const roofY = getFloorY(highestFloor);
+      const acTopY = roofY - 18;
+      for (let i = 0; i < 3; i++) {
+        acPuffs.push({
+          x: acX + 20 + Math.random() * 4,
+          y: acTopY + Math.random() * 4,
+          vx: 0.3 + Math.random() * 0.3,
+          vy: -0.4 - Math.random() * 0.3,
+          life: 25 + Math.random() * 15,
+        });
+      }
+    }
+  }
+  // Update puffs
+  for (let i = acPuffs.length - 1; i >= 0; i--) {
+    const p = acPuffs[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0) acPuffs.splice(i, 1);
+  }
+}
+
+function drawACPuffs() {
+  for (let i = 0; i < acPuffs.length; i++) {
+    const p = acPuffs[i];
+    const alpha = Math.min(1, p.life / 8) * 0.5;
+    ctx.fillStyle = `rgba(180,180,190,${alpha})`;
+    const size = 3 + (25 - Math.min(p.life, 25)) * 0.4;
+    ctx.fillRect(p.x, p.y, size, size * 0.7);
+  }
+}
+
+// Compute roofRight without drawing — used by AC puffs to know where the AC sits
+function computeRoofRight() {
+  let maxPlaced = 0;
+  for (let fi = 0; fi < towerGrid.length; fi++) {
+    let count = 0;
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[fi][ci] !== null) count++;
+      else break;
+    }
+    if (count > maxPlaced) maxPlaced = count;
+  }
+  let topFloorIdx = towerGrid.length - 1;
+  let topFloorWidth = 0;
+  if (topFloorIdx >= 0 && towerGrid[topFloorIdx]) {
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[topFloorIdx][ci] !== null) topFloorWidth++;
+      else break;
+    }
+  }
+  if (topFloorWidth === 0) topFloorWidth = maxPlaced;
+  return INTERIOR_X + topFloorWidth * CELL_W;
+}
+
+/* ═══════════════════════════════════════════════════
+   ELEVATOR ANIMATION
+   ═══════════════════════════════════════════════════ */
+
+const ELEV_CLOSED   = 'CLOSED';
+const ELEV_OPENING  = 'OPENING';
+const ELEV_OPEN     = 'OPEN';
+const ELEV_CLOSING  = 'CLOSING';
+
+const ELEV_SPEED    = 0.08;      // floors per frame at 30fps
+const ELEV_SNAP     = 0.05;      // threshold to snap to exact floor
+const OPENING_FRAMES = 4;
+const OPEN_FRAMES    = 8;
+const CLOSING_FRAMES = 4;
+
+let elevator = {
+  currentFloor: 0,    // float — animated position
+  targetFloor:  -1,   // int — destination floor index (-1 = no target, idling)
+  doorState:    ELEV_CLOSED,
+  doorTimer:    0,
+  doorOpen:     0,    // 0.0 (closed) → 1.0 (fully open)
+  idleTimer:    60 + Math.random() * 60, // frames to wait before picking next target
+  whooshPlayed: false,
+};
+
+function getOccupiedFloors() {
+  const floors = [];
+  for (let fi = 0; fi < towerGrid.length; fi++) {
+    if (towerGrid[fi] && towerGrid[fi].some(c => c !== null)) {
+      floors.push(fi);
+    }
+  }
+  return floors;
+}
+
+function pickNewElevatorTarget() {
+  const occupied = getOccupiedFloors();
+  if (occupied.length === 0) return;
+
+  // Pick a random floor different from the current one
+  const others = occupied.filter(f => f !== Math.floor(elevator.currentFloor));
+  if (others.length === 0) return;
+
+  elevator.targetFloor = others[Math.floor(Math.random() * others.length)];
+  elevator.whooshPlayed = false;
+}
+
+function updateElevator() {
+  const occupied = getOccupiedFloors();
+  if (occupied.length === 0) return;
+
+  if (elevator.doorState === ELEV_CLOSED) {
+    // If we have a target and aren't at it, move toward it
+    if (elevator.targetFloor >= 0) {
+      // Check if we've arrived
+      if (Math.abs(elevator.currentFloor - elevator.targetFloor) < ELEV_SNAP) {
+        elevator.currentFloor = elevator.targetFloor;
+        elevator.targetFloor = -1; // consumed
+        elevator.doorState = ELEV_OPENING;
+        elevator.doorTimer = OPENING_FRAMES;
+        elevator.doorOpen = 0;
+        playElevatorDing();
+        playDoorClick();
+        return;
+      }
+
+      // Move toward target
+      if (!elevator.whooshPlayed) {
+        elevator.whooshPlayed = true;
+        playElevatorWhoosh();
+      }
+      const dir = elevator.targetFloor > elevator.currentFloor ? 1 : -1;
+      elevator.currentFloor += dir * ELEV_SPEED;
+
+      // If we overshot, snap — treat as arrival
+      if ((dir > 0 && elevator.currentFloor >= elevator.targetFloor) ||
+          (dir < 0 && elevator.currentFloor <= elevator.targetFloor)) {
+        elevator.currentFloor = elevator.targetFloor;
+        elevator.targetFloor = -1; // consumed
+        elevator.doorState = ELEV_OPENING;
+        elevator.doorTimer = OPENING_FRAMES;
+        elevator.doorOpen = 0;
+        playElevatorDing();
+        playDoorClick();
+        return;
+      }
+    }
+
+    // Idle and pick new target only when not actively moving
+    if (elevator.targetFloor < 0) {
+      elevator.idleTimer--;
+      if (elevator.idleTimer <= 0) {
+        pickNewElevatorTarget();
+      }
+    }
+
+  } else if (elevator.doorState === ELEV_OPENING) {
+    elevator.doorTimer--;
+    elevator.doorOpen = 1 - (elevator.doorTimer / OPENING_FRAMES);
+    if (elevator.doorTimer <= 0) {
+      elevator.doorState = ELEV_OPEN;
+      elevator.doorTimer = OPEN_FRAMES;
+      elevator.doorOpen = 1;
+    }
+
+  } else if (elevator.doorState === ELEV_OPEN) {
+    elevator.doorTimer--;
+    elevator.doorOpen = 1;
+    if (elevator.doorTimer <= 0) {
+      elevator.doorState = ELEV_CLOSING;
+      elevator.doorTimer = CLOSING_FRAMES;
+      playDoorClick();
+    }
+
+  } else if (elevator.doorState === ELEV_CLOSING) {
+    elevator.doorTimer--;
+    elevator.doorOpen = elevator.doorTimer / CLOSING_FRAMES;
+    if (elevator.doorTimer <= 0) {
+      elevator.doorState = ELEV_CLOSED;
+      elevator.doorOpen = 0;
+      elevator.idleTimer = 30 + Math.random() * 60;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   SOUND SYSTEM
+   ═══════════════════════════════════════════════════ */
+
+let audioCtx = null;
+let masterGain = null;
+let soundEnabled = true;
+let towerHumOsc = null;
+let towerHumGain = null;
+
+function initAudio() {
+  if (audioCtx) return; // already initialized
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = soundEnabled ? 0.3 : 0;
+    masterGain.connect(audioCtx.destination);
+  } catch (e) {
+    audioCtx = null; // Web Audio API unavailable
+  }
+}
+
+function ensureAudio() {
+  if (!audioCtx) return false;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return soundEnabled;
+}
+
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  if (masterGain) {
+    masterGain.gain.value = soundEnabled ? 0.3 : 0;
+  }
+  if (!soundEnabled) {
+    stopTowerHum();
+  } else if (hasTowerContent()) {
+    updateTowerHum();
+  }
+}
+
+function playElevatorDing() {
+  if (!ensureAudio()) return;
+  // Two-tone chime: 880Hz (80ms) + 1320Hz (120ms)
+  const t = audioCtx.currentTime;
+  const g1 = audioCtx.createGain();
+  g1.connect(masterGain);
+  g1.gain.setValueAtTime(0.25, t);
+  g1.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  const o1 = audioCtx.createOscillator();
+  o1.type = 'sine';
+  o1.frequency.value = 880;
+  o1.connect(g1);
+  o1.start(t);
+  o1.stop(t + 0.09);
+
+  const g2 = audioCtx.createGain();
+  g2.connect(masterGain);
+  g2.gain.setValueAtTime(0.001, t + 0.06);
+  g2.gain.linearRampToValueAtTime(0.2, t + 0.08);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
+  const o2 = audioCtx.createOscillator();
+  o2.type = 'sine';
+  o2.frequency.value = 1320;
+  o2.connect(g2);
+  o2.start(t + 0.06);
+  o2.stop(t + 0.21);
+}
+
+function playElevatorWhoosh() {
+  if (!ensureAudio()) return;
+  // Filtered noise burst, 100ms, bandpass 400-800Hz
+  const t = audioCtx.currentTime;
+  const bufLen = audioCtx.sampleRate * 0.1;
+  const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < bufLen; i++) data[i] = (Math.random() * 2 - 1);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filt = audioCtx.createBiquadFilter();
+  filt.type = 'bandpass';
+  filt.frequency.value = 600;
+  filt.Q.value = 2;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(0.15, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  src.connect(filt);
+  filt.connect(g);
+  g.connect(masterGain);
+  src.start(t);
+  src.stop(t + 0.11);
+}
+
+function playDoorClick() {
+  if (!ensureAudio()) return;
+  // Short high click, 2000Hz, 30ms
+  const t = audioCtx.currentTime;
+  const g = audioCtx.createGain();
+  g.connect(masterGain);
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+  const o = audioCtx.createOscillator();
+  o.type = 'square';
+  o.frequency.value = 2000;
+  o.connect(g);
+  o.start(t);
+  o.stop(t + 0.035);
+}
+
+function playPlacementThud() {
+  if (!ensureAudio()) return;
+  // ~150Hz impact + metallic overtone ~800Hz, 80ms, fast decay
+  const t = audioCtx.currentTime;
+  const g1 = audioCtx.createGain();
+  g1.connect(masterGain);
+  g1.gain.setValueAtTime(0.3, t);
+  g1.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  const o1 = audioCtx.createOscillator();
+  o1.type = 'sine';
+  o1.frequency.setValueAtTime(150, t);
+  o1.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+  o1.connect(g1);
+  o1.start(t);
+  o1.stop(t + 0.09);
+
+  const g2 = audioCtx.createGain();
+  g2.connect(masterGain);
+  g2.gain.setValueAtTime(0.1, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+  const o2 = audioCtx.createOscillator();
+  o2.type = 'triangle';
+  o2.frequency.value = 800;
+  o2.connect(g2);
+  o2.start(t);
+  o2.stop(t + 0.07);
+}
+
+function playFootstep() {
+  if (!ensureAudio()) return;
+  // Random quiet click, 200-400Hz, 20ms
+  const t = audioCtx.currentTime;
+  const freq = 200 + Math.random() * 200;
+  const g = audioCtx.createGain();
+  g.connect(masterGain);
+  g.gain.setValueAtTime(0.04, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+  const o = audioCtx.createOscillator();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  o.connect(g);
+  o.start(t);
+  o.stop(t + 0.025);
+}
+
+function startTowerHum() {
+  if (!ensureAudio()) return;
+  if (towerHumOsc) return; // already running
+  try {
+    towerHumOsc = audioCtx.createOscillator();
+    towerHumOsc.type = 'sine';
+    towerHumOsc.frequency.value = 60;
+    towerHumGain = audioCtx.createGain();
+    towerHumGain.gain.value = 0.02;
+    towerHumOsc.connect(towerHumGain);
+    towerHumGain.connect(masterGain);
+    towerHumOsc.start();
+  } catch (e) {
+    towerHumOsc = null;
+  }
+}
+
+function stopTowerHum() {
+  if (towerHumOsc) {
+    try { towerHumOsc.stop(); } catch (e) {}
+    towerHumOsc = null;
+    towerHumGain = null;
+  }
+}
+
+function updateTowerHum() {
+  const floorCount = getOccupiedFloors().length;
+  if (floorCount >= 3 && !towerHumOsc) {
+    startTowerHum();
+  } else if (floorCount < 3 && towerHumOsc) {
+    stopTowerHum();
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   AMBIENT EFFECTS
+   ═══════════════════════════════════════════════════ */
+
+// Dynamic clouds — each has an x position that drifts right
+const clouds = [
+  { x: 120, y: 40,  speed: 0.15 },
+  { x: 350, y: 80,  speed: 0.25 },
+  { x: 580, y: 30,  speed: 0.18 },
+  { x: 720, y: 100, speed: 0.22 },
+  { x: 200, y: 130, speed: 0.12 },
+  { x: 480, y: 150, speed: 0.20 },
+];
+
+// Pre-compute skyline window positions and store lit state (no per-frame allocation)
+let windowLights = []; // array of { lit: boolean }
+
+function initWindowLights() {
+  windowLights = [];
+  let x = 0;
+  CITY.forEach(b => {
+    for (let wy = GROUND_Y - b.h + 8; wy < GROUND_Y - 8; wy += 10) {
+      for (let wx = x + 5; wx < x + b.w - 5; wx += 9) {
+        // Deterministic initial state matching the old hash
+        windowLights.push({ lit: ((wx * 7 + wy * 13) % 5) < 3 });
+      }
+    }
+    x += b.w;
+  });
+}
+initWindowLights();
+
+function updateClouds() {
+  for (let i = 0; i < clouds.length; i++) {
+    const c = clouds[i];
+    c.x += c.speed;
+    // Wrap around when cloud exits the right edge (clouds are ~60px wide)
+    if (c.x > CANVAS_W + 60) {
+      c.x = -60;
+    }
+  }
+}
+
+function updateWindowLights() {
+  // ~1% chance per second = ~0.033% per frame at 30fps
+  for (let i = 0; i < windowLights.length; i++) {
+    if (Math.random() < 0.00033) {
+      windowLights[i].lit = !windowLights[i].lit;
+    }
+  }
+}
+
+function drawClouds() {
+  for (let i = 0; i < clouds.length; i++) {
+    drawCloud(clouds[i].x, clouds[i].y);
+  }
+}
+
+function drawCitySkyline() {
+  let x = 0;
+  let winIdx = 0;
+  CITY.forEach((b, i) => {
+    const c = CITY_COLS[i % 3];
+    ctx.fillStyle = c;
+    ctx.fillRect(x, GROUND_Y - b.h, b.w, b.h);
+    ctx.fillStyle = shade(c, 10);
+    ctx.fillRect(x, GROUND_Y - b.h, b.w, 3);
+    ctx.fillStyle = shade(c, -15);
+    ctx.fillRect(x, GROUND_Y - 4, b.w, 4);
+    for (let wy = GROUND_Y - b.h + 8; wy < GROUND_Y - 8; wy += 10) {
+      for (let wx = x + 5; wx < x + b.w - 5; wx += 9) {
+        ctx.fillStyle = windowLights[winIdx].lit ? '#FFE4A0' : '#4A6A7A';
+        ctx.fillRect(wx, wy, 5, 6);
+        winIdx++;
+      }
+    }
+    x += b.w;
+  });
 }

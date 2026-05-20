@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(openspec *)",
-      "Bash(read_file *)"
+      "Bash(read_file *)",
+      "Bash(node *)"
     ]
   },
   "$version": 4

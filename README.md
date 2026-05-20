@@ -4,7 +4,7 @@ A **SimTower-inspired** vertical building simulation rendered entirely on a `<ca
 
 > This entire project was built autonomously by Qwen 3.6 27B running in two configurations:
 > - **Locally** on a MacBook with M5 Pro chip
-> - **In the cloud** on GCP with an A100 80GB GPU
+> - **In the cloud** on GCP with an A100 80GB GPU and with an A100 40GB GPU. Both using Llama.cpp for inference
 
 The goal was to evaluate how far a single LLM session can take a greenfield, non-trivial interactive game — from zero to a playable prototype.
 

@@ -18,7 +18,7 @@ The system SHALL use `requestAnimationFrame` to drive a continuous render loop t
 
 ### Requirement: Game loop updates animation state then renders
 
-The system SHALL update all animation state (people positions, elevator position, cloud positions) before calling `renderAll()` each frame.
+The system SHALL update all animation state (people positions, elevator position, cloud positions, sound triggers) before calling `renderAll()` each frame.
 
 #### Scenario: State updates before render
 - **WHEN** a frame fires
