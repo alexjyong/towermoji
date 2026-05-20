@@ -54,21 +54,21 @@
 
 ## 6. Integration and Testing
 
-- [ ] 6.1 Verify: people walk back and forth on placed floors
-- [ ] 6.2 Verify: people pause periodically and resume walking
-- [ ] 6.3 Verify: people use staircases to move between floors
-- [ ] 6.4 Verify: elevator moves between occupied floors with door animations
-- [ ] 6.5 Verify: clouds drift across the sky
-- [ ] 6.6 Verify: skyline window lights flicker
-- [ ] 6.7 Verify: game loop does not run on empty lot (no tower placed yet)
-- [ ] 6.8 Verify: test pages remain static (no animation loop, no audio)
-- [ ] 6.9 Verify: performance is acceptable on mobile (no jank, ~30fps)
-- [ ] 6.10 Verify: no sound plays until first user click
-- [ ] 6.11 Verify: elevator ding plays on arrival at each floor
-- [ ] 6.12 Verify: elevator whoosh plays on movement start
-- [ ] 6.13 Verify: door clicks play on open/close transitions
-- [ ] 6.14 Verify: placement pop plays on cell placement
-- [ ] 6.15 Verify: tower hum is audible with 3+ floors and silent otherwise
-- [ ] 6.16 Verify: footstep sounds play occasionally for walking people
-- [ ] 6.17 Verify: no console errors when Web Audio API is unavailable
-- [ ] 6.18 Create `test/animation-preview.html` with a pre-built tower to inspect all animations and sounds
+- [x] 6.1 Verify: people walk back and forth on placed floors
+- [x] 6.2 Verify: people pause periodically and resume walking
+- [x] 6.3 Verify: people use staircases to move between floors
+- [x] 6.4 Verify: elevator moves between occupied floors with door animations
+- [x] 6.5 Verify: clouds drift across the sky
+- [x] 6.6 Verify: skyline window lights flicker
+- [x] 6.7 Verify: game loop does not run on empty lot (no tower placed yet)
+- [x] 6.8 Verify: test pages remain static (no animation loop, no audio)
+- [x] 6.9 Verify: performance is acceptable on mobile (no jank, ~30fps)
+- [x] 6.10 Verify: no sound plays until first user click
+- [x] 6.11 Verify: elevator ding plays on arrival at each floor
+- [x] 6.12 Verify: elevator whoosh plays on movement start
+- [x] 6.13 Verify: door clicks play on open/close transitions
+- [x] 6.14 Verify: placement pop plays on cell placement
+- [x] 6.15 Verify: tower hum is audible with 3+ floors and silent otherwise
+- [x] 6.16 Verify: footstep sounds play occasionally for walking people
+- [x] 6.17 Verify: no console errors when Web Audio API is unavailable
+- [x] 6.18 Create `test/animation-preview.html` with a pre-built tower to inspect all animations and sounds

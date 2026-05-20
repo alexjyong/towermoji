@@ -123,6 +123,58 @@ function tryStartGameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+/* ═══════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+   ═══════════════════════════════════════════════════ */
+
+let toastMsg = '';
+let toastTimer = 0;
+const TOAST_DURATION = 180; // ~6 seconds at 30fps
+
+function showToast(msg) {
+  toastMsg = msg;
+  toastTimer = TOAST_DURATION;
+}
+
+function updateToast() {
+  if (toastTimer > 0) toastTimer--;
+}
+
+function drawToast() {
+  if (toastTimer <= 0 || !toastMsg) return;
+  const alpha = Math.min(1, toastTimer / 20); // fade in over ~0.7s
+  const fadeAlpha = toastTimer < 30 ? toastTimer / 30 : alpha; // fade out last 1s
+
+  ctx.save();
+  ctx.globalAlpha = fadeAlpha;
+
+  const textW = ctx.measureText(toastMsg).width;
+  // Use a default font size to measure
+  ctx.font = '12px monospace';
+  const measured = ctx.measureText(toastMsg).width;
+  const pad = 16;
+  const boxW = measured + pad * 2;
+  const boxH = 28;
+  const boxX = (CANVAS_W - boxW) / 2;
+  const boxY = 8;
+
+  // Background
+  ctx.fillStyle = '#1A1A2ACC';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeStyle = '#FF6B6B';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  // Icon + text
+  ctx.fillStyle = '#FF6B6B';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`⚠ ${toastMsg}`, CANVAS_W / 2, boxY + boxH / 2);
+
+  ctx.restore();
+}
+
 function gameLoop(timestamp) {
   if (!gameRunning) return;
   if (!lastFrameTime) lastFrameTime = timestamp;
@@ -136,11 +188,13 @@ function gameLoop(timestamp) {
 }
 
 function updateAnimations() {
-  // Each frame: update people, elevator, clouds, sounds
+  // Each frame: update people, elevator, clouds, AC puffs, toast, sounds
   updatePeople();
   updateElevator();
   updateClouds();
   updateWindowLights();
+  updateACPuffs();
+  updateToast();
   updateTowerHum();
 }
 
@@ -158,24 +212,13 @@ const PERSON_STAIRS  = 'USING_STAIRS';
 // Skin tone modifiers (Fitzpatrick scale) — empty string = default/no modifier
 const SKIN_TONES = ['', '\u{1F3FB}', '\u{1F3FC}', '\u{1F3FD}', '\u{1F3FE}', '\u{1F3FF}'];
 
-// Base person emoji sets — skin tone is appended at spawn time
-const WALK_BASE   = ['🚶','🚶‍♀️','🚶‍♂️','🧑','👩','👨','🧑‍💼','👩‍💼','🧑‍🔧','🧑‍🍳','👷','🧑‍🎨'];
-const PAUSE_BASE  = ['🧍','🧍‍♀️','🧍‍♂️','🧑','👩','👨','🧑‍💼','👩‍💼','🧑‍🔧','🧑‍🍳','👷','🧑‍🎨'];
-const SIT_BASE    = ['🧎','🧎‍♀️','🧎‍♂️','🧘','🧘‍♀️','🧘‍♂️'];
+// Base person emoji sets — simple compact emoji only (ZWJ sequences render too large)
+const WALK_BASE   = ['🚶', '🚶', '🚶', '🚶', '🚶'];  // generic walkers — skin tone adds variety
+const PAUSE_BASE  = ['🧍', '🧍', '🧍', '🧍', '🧍'];
 
 // Apply a skin tone modifier to a person emoji
-// Tone goes right after the base emoji character, before any ZWJ sequence
 function applySkinTone(emoji, tone) {
   if (!tone) return emoji;
-  // Insert tone modifier after the first emoji codepoint
-  const first = emoji[0];
-  // Handle lone base chars that aren't part of ZWJ sequences
-  if (emoji === first) return first + tone;
-  // For ZWJ sequences (e.g. 👩‍💼), insert tone after the base emoji
-  if (['🧑','👩','👨','🚶','🧍','🧎','🧘','👷'].includes(first)) {
-    return first + tone + emoji.slice(1);
-  }
-  // Fallback: append tone
   return emoji + tone;
 }
 
@@ -320,14 +363,24 @@ function updatePeople() {
 function drawPeopleOnFloor(floorIdx) {
   const y = getFloorY(floorIdx);
   const bot = y + FLOOR_H - 4;
-  ctx.font = '18px serif';
+  ctx.font = '14px serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'bottom';
 
   for (let i = 0; i < people.length; i++) {
     const p = people[i];
     if (p.floorIdx !== floorIdx) continue;
-    ctx.fillText(p.emoji, p.x, bot + 1);
+
+    if (p.direction > 0) {
+      // Flip emoji horizontally for rightward walking
+      ctx.save();
+      ctx.translate(p.x, 0);
+      ctx.scale(-1, 1);
+      ctx.fillText(p.emoji, 0, bot + 1);
+      ctx.restore();
+    } else {
+      ctx.fillText(p.emoji, p.x, bot + 1);
+    }
   }
 }
 
@@ -439,9 +492,9 @@ function drawTowerGrid() {
 
   // Draw animated elevator car on top of all shafts
   if (gameRunning) {
-    const cf = Math.floor(elevator.currentFloor);
-    if (cf >= 0 && cf <= highestFloor) {
-      drawElevatorCar(cf, elevator.doorOpen);
+    const cf = elevator.currentFloor;
+    if (cf >= 0 && Math.ceil(cf) <= highestFloor) {
+      drawElevatorCar(0, elevator.doorOpen, cf);
     }
   }
 }
@@ -544,6 +597,18 @@ function drawTowerFrame(top) {
   }
   const frameRight = INTERIOR_X + maxPlaced * CELL_W;
 
+  // Roof beam width: only span as wide as the topmost occupied floor
+  const topFloorIdx = towerGrid.length - 1;
+  let topFloorWidth = 0;
+  if (topFloorIdx >= 0 && towerGrid[topFloorIdx]) {
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[topFloorIdx][ci] !== null) topFloorWidth++;
+      else break;
+    }
+  }
+  if (topFloorWidth === 0) topFloorWidth = maxPlaced; // fallback
+  const roofRight = INTERIOR_X + topFloorWidth * CELL_W;
+
   // Left structural beam — stop before the label column so numbers show through
   ctx.fillStyle = '#2D2D3D';
   ctx.fillRect(LABEL_W + 1, top, STAIR_W + 4, bot - top + 4);
@@ -551,13 +616,16 @@ function drawTowerFrame(top) {
   if (maxPlaced === GRID_COLS) {
     ctx.fillRect(CANVAS_W - STAIR_W - 2, top, STAIR_W + 2, bot - top + 4);
   }
-  // Roof beam
+  // Roof beam — only spans the topmost floor's width
   ctx.fillStyle = '#3D3D4D';
-  ctx.fillRect(0, top - 4, frameRight, 6);
-  // AC unit on roof
-  ctx.fillStyle = '#6A6A7A';
-  ctx.fillRect(300, top - 18, 20, 14);
-  ctx.fillRect(306, top - 22, 8, 4);
+  ctx.fillRect(0, top - 4, roofRight, 6);
+  // AC unit on roof — only if roof is wide enough, positioned relative to roof edge
+  if (roofRight > INTERIOR_X + CELL_W * 2) {
+    ctx.fillStyle = '#6A6A7A';
+    const acX = INTERIOR_X + CELL_W + 10;
+    ctx.fillRect(acX, top - 18, 20, 14);
+    ctx.fillRect(acX + 6, top - 22, 8, 4);
+  }
   // Ground beam
   ctx.fillStyle = '#3D3D4D';
   ctx.fillRect(0, bot - 2, frameRight, 4);
@@ -738,16 +806,13 @@ function drawElevator(y) {
   ctx.fillRect(SHAFT_X, y + FLOOR_H - 6, SHAFT_W, 2);
 }
 
-function drawElevatorCar(floorIdx, doorOpenAmount) {
+function drawElevatorCar(_baseFloorIdx, doorOpenAmount, currentFloatFloor) {
   // Draw the animated elevator car at its current position.
-  // floorIdx: the floor index to center the car on (use elevator.currentFloor for animation)
-  // doorOpenAmount: 0.0 (closed) → 1.0 (fully open)
-  const baseY = getFloorY(floorIdx);
-  // Pixel offset from the base floor: currentFloor is a float, so the fractional part
-  // gives us the sub-floor pixel offset
-  const frac = elevator.currentFloor - floorIdx;
-  const offsetPixels = -frac * FLOOR_H;
-  const carY = baseY + offsetPixels + 6;
+  // currentFloatFloor: float position (e.g. 0.7 = 70% from floor 0 to floor 1)
+  // We always use floor 0 as anchor to avoid discontinuity at integer boundaries.
+  const floatFloor = currentFloatFloor !== undefined ? currentFloatFloor : elevator.currentFloor;
+  const baseY = getFloorY(0);
+  const carY = baseY - floatFloor * FLOOR_H + 6;
   const carH = FLOOR_H - 12;
 
   // Car interior
@@ -771,16 +836,15 @@ function drawElevatorCar(floorIdx, doorOpenAmount) {
   ctx.fillRect(SHAFT_X + SHAFT_W / 2 - 3, carY + carH / 2 - 1, 1, 4);
   ctx.fillRect(SHAFT_X + SHAFT_W / 2 + 2, carY + carH / 2 - 1, 1, 4);
 
-  // Indicator light
+  // Indicator light (above the car)
   let lightColor = '#44FF44';
   if (doorOpenAmount > 0) {
     lightColor = '#FFD700';
   } else if (Math.abs(elevator.currentFloor - Math.round(elevator.currentFloor)) > ELEV_SNAP) {
     lightColor = '#FF4444';
   }
-  const indicatorY = baseY + offsetPixels + 3;
   ctx.fillStyle = lightColor;
-  ctx.fillRect(SHAFT_X + SHAFT_W / 2 - 1, indicatorY, 2, 2);
+  ctx.fillRect(SHAFT_X + SHAFT_W / 2 - 1, carY - 3, 2, 2);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1303,7 +1367,7 @@ function drawToolbar() {
     ctx.fillText(ft.name, bx + btnW / 2, by + bh / 2 + 12);
   });
 
-  // Sound toggle button — pinned to the right edge
+  // Sound toggle button — pinned to the right edge of toolbar
   const sndW = 40;
   const sndX = CANVAS_W - sndW - 4;
   ctx.fillStyle = '#2A2A3A';
@@ -1316,6 +1380,28 @@ function drawToolbar() {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = soundEnabled ? '#FFF' : '#666';
   ctx.fillText(soundEnabled ? '🔊' : '🔇', sndX + sndW / 2, by + bh / 2);
+}
+
+// Sound button in upper-right corner (outside toolbar)
+const SND_BTN_SIZE = 36;
+const SND_BTN_X = CANVAS_W - SND_BTN_SIZE - 6;
+const SND_BTN_Y = 6;
+
+function drawSoundButton() {
+  const sx = SND_BTN_X;
+  const sy = SND_BTN_Y;
+  const ss = SND_BTN_SIZE;
+
+  ctx.fillStyle = 'rgba(26,26,42,0.85)';
+  ctx.fillRect(sx, sy, ss, ss);
+  ctx.strokeStyle = soundEnabled ? '#FFD700' : '#666';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(sx + 1, sy + 1, ss - 2, ss - 2);
+  ctx.font = '20px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = soundEnabled ? '#FFF' : '#666';
+  ctx.fillText(soundEnabled ? '🔊' : '🔇', sx + ss / 2, sy + ss / 2);
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1332,7 +1418,10 @@ function renderBackground() {
 function renderAll() {
   renderBackground();
   drawTowerGrid();
+  drawACPuffs();
   drawToolbar();
+  drawSoundButton();
+  drawToast();
 }
 
 // Default floor stack for preview — matches SimTower style
@@ -1375,6 +1464,14 @@ function setupClickHandler() {
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
 
+    // Check sound button (upper-right corner) first — before toolbar
+    if (mx >= SND_BTN_X && mx < SND_BTN_X + SND_BTN_SIZE &&
+        my >= SND_BTN_Y && my < SND_BTN_Y + SND_BTN_SIZE) {
+      toggleSound();
+      renderAll();
+      return;
+    }
+
     // Check toolbar click
     if (my >= TOOLBAR_Y) {
       handleToolbarClick(mx, my);
@@ -1387,15 +1484,15 @@ function setupClickHandler() {
 }
 
 function handleToolbarClick(mx, my) {
-  // Check sound toggle button first
-  const sndW = 40;
-  const sndX = CANVAS_W - sndW - 4;
-  if (mx >= sndX && mx < sndX + sndW) {
+  // Check sound toggle button (upper-right corner)
+  if (mx >= SND_BTN_X && mx < SND_BTN_X + SND_BTN_SIZE &&
+      my >= SND_BTN_Y && my < SND_BTN_Y + SND_BTN_SIZE) {
     toggleSound();
     renderAll();
     return;
   }
 
+  // Check toolbar sound button (legacy location)
   const pad = 6;
   const btnCount = FLOOR_TYPES.length;
   const totalPad = pad * (btnCount + 1);
@@ -1464,8 +1561,14 @@ function placeCell(floorIdx, cellIdx) {
   if (towerGrid.length >= MAX_FLOORS && floorIdx >= towerGrid.length) return;
 
   // Ground floor (row 0) can only be Lobby; Lobby cannot be placed on upper floors
-  if (floorIdx === 0 && selectedFloorType !== 'Lobby') return;
-  if (floorIdx > 0 && selectedFloorType === 'Lobby') return;
+  if (floorIdx === 0 && selectedFloorType !== 'Lobby') {
+    showToast('Only Lobby can be placed on the first floor');
+    return;
+  }
+  if (floorIdx > 0 && selectedFloorType === 'Lobby') {
+    showToast('Lobby can only be placed on the first floor');
+    return;
+  }
 
   ensureFloorRow(floorIdx);
   const cells = towerGrid[floorIdx];
@@ -1507,6 +1610,86 @@ function flashCell(floorIdx, cellIdx) {
   setTimeout(() => {
     renderAll();
   }, 150);
+}
+
+/* ═══════════════════════════════════════════════════
+   AC UNIT ANIMATION
+   ═══════════════════════════════════════════════════ */
+
+const acPuffs = [];   // { x, y, vx, vy, life }
+let acPuffTimer = 0;
+
+function updateACPuffs() {
+  // Spawn a new puff every ~40 frames (every ~1.3s at 30fps)
+  acPuffTimer++;
+  if (acPuffTimer >= 40) {
+    acPuffTimer = 0;
+    const roofRight = computeRoofRight();
+    if (roofRight > INTERIOR_X + CELL_W * 2) {
+      const acX = INTERIOR_X + CELL_W + 10;
+      // Find highest occupied floor to compute the roof Y
+      let highestFloor = -1;
+      for (let fi = towerGrid.length - 1; fi >= 0; fi--) {
+        if (towerGrid[fi] && towerGrid[fi].some(c => c !== null)) {
+          highestFloor = fi;
+          break;
+        }
+      }
+      if (highestFloor < 0) return;
+      const roofY = getFloorY(highestFloor);
+      const acTopY = roofY - 18;
+      for (let i = 0; i < 3; i++) {
+        acPuffs.push({
+          x: acX + 20 + Math.random() * 4,
+          y: acTopY + Math.random() * 4,
+          vx: 0.3 + Math.random() * 0.3,
+          vy: -0.4 - Math.random() * 0.3,
+          life: 25 + Math.random() * 15,
+        });
+      }
+    }
+  }
+  // Update puffs
+  for (let i = acPuffs.length - 1; i >= 0; i--) {
+    const p = acPuffs[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    if (p.life <= 0) acPuffs.splice(i, 1);
+  }
+}
+
+function drawACPuffs() {
+  for (let i = 0; i < acPuffs.length; i++) {
+    const p = acPuffs[i];
+    const alpha = Math.min(1, p.life / 8) * 0.5;
+    ctx.fillStyle = `rgba(180,180,190,${alpha})`;
+    const size = 3 + (25 - Math.min(p.life, 25)) * 0.4;
+    ctx.fillRect(p.x, p.y, size, size * 0.7);
+  }
+}
+
+// Compute roofRight without drawing — used by AC puffs to know where the AC sits
+function computeRoofRight() {
+  let maxPlaced = 0;
+  for (let fi = 0; fi < towerGrid.length; fi++) {
+    let count = 0;
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[fi][ci] !== null) count++;
+      else break;
+    }
+    if (count > maxPlaced) maxPlaced = count;
+  }
+  let topFloorIdx = towerGrid.length - 1;
+  let topFloorWidth = 0;
+  if (topFloorIdx >= 0 && towerGrid[topFloorIdx]) {
+    for (let ci = 0; ci < GRID_COLS; ci++) {
+      if (towerGrid[topFloorIdx][ci] !== null) topFloorWidth++;
+      else break;
+    }
+  }
+  if (topFloorWidth === 0) topFloorWidth = maxPlaced;
+  return INTERIOR_X + topFloorWidth * CELL_W;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -1583,17 +1766,26 @@ function updateElevator() {
       const dir = elevator.targetFloor > elevator.currentFloor ? 1 : -1;
       elevator.currentFloor += dir * ELEV_SPEED;
 
-      // If we overshot, snap
+      // If we overshot, snap — treat as arrival
       if ((dir > 0 && elevator.currentFloor >= elevator.targetFloor) ||
           (dir < 0 && elevator.currentFloor <= elevator.targetFloor)) {
         elevator.currentFloor = elevator.targetFloor;
+        elevator.targetFloor = -1; // consumed
+        elevator.doorState = ELEV_OPENING;
+        elevator.doorTimer = OPENING_FRAMES;
+        elevator.doorOpen = 0;
+        playElevatorDing();
+        playDoorClick();
+        return;
       }
     }
 
-    // No active target — idle and then pick one
-    elevator.idleTimer--;
-    if (elevator.idleTimer <= 0) {
-      pickNewElevatorTarget();
+    // Idle and pick new target only when not actively moving
+    if (elevator.targetFloor < 0) {
+      elevator.idleTimer--;
+      if (elevator.idleTimer <= 0) {
+        pickNewElevatorTarget();
+      }
     }
 
   } else if (elevator.doorState === ELEV_OPENING) {

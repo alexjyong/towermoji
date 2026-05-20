@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Animation Preview — Towermoji</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    body { flex-direction: column; padding-bottom: 2rem; }
+    .label {
+      color: #888;
+      font-family: monospace;
+      text-align: center;
+      margin-top: 0.5rem;
+      font-size: 13px;
+    }
+    .instructions {
+      color: #aaa;
+      font-family: monospace;
+      text-align: center;
+      font-size: 12px;
+      margin-top: 0.3rem;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <div class="label">Animation Preview — all animated elements visible at a glance</div>
+  <div class="instructions">Click the canvas once to enable audio (tower hum, footsteps). Click the 🔊 button to toggle sound.</div>
+  <script>window.preview = 1;</script>
+  <script src="../js/game.js"></script>
+  <script>
+    // Pre-built tower: 7 floors with mixed types to showcase all animations
+    const previewFloors = [
+      'Lobby',
+      'Office',
+      'Office',
+      'Residential',
+      'Residential',
+      'Restaurant',
+      'Retail',
+    ];
+
+    // Build the tower grid from the preview floor list (bottom → top)
+    previewFloors.forEach((type, fi) => {
+      ensureFloorRow(fi);
+      if (type) {
+        // Place 2-3 cells per floor for visual variety
+        const cells = type === 'Lobby' ? 3 : (fi >= 3 && fi <= 4 ? 3 : 2);
+        for (let ci = 0; ci < cells && ci < GRID_COLS; ci++) {
+          towerGrid[fi][ci] = type;
+        }
+      }
+    });
+
+    // Spawn some people on each occupied floor
+    for (let fi = 0; fi < towerGrid.length; fi++) {
+      if (towerGrid[fi] && towerGrid[fi].some(c => c !== null)) {
+        const numPeople = 2 + Math.floor(Math.random() * 3);
+        for (let p = 0; p < numPeople; p++) {
+          spawnPerson(fi);
+        }
+      }
+    }
+
+    // Set up elevator
+    elevator.currentFloor = 0;
+    elevator.targetFloor = -1;
+    elevator.doorState = ELEV_CLOSED;
+    elevator.doorTimer = 0;
+    elevator.doorOpen = 0;
+    elevator.idleTimer = 20;
+    elevator.whooshPlayed = false;
+
+    // Start the game loop even in preview mode so animations run
+    gameRunning = true;
+    lastFrameTime = 0;
+    requestAnimationFrame(gameLoop);
+
+    // Title overlay
+    function drawTitle() {
+      ctx.fillStyle = '#FFFFFFCC';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText('🏗️ Animation Preview', CANVAS_W - 8, 16);
+      ctx.fillText(`${towerGrid.length} floors | ${people.length} people`, CANVAS_W - 8, 30);
+    }
+
+    // Patch renderAll to add title
+    const origRenderAll = renderAll;
+    renderAll = function() {
+      origRenderAll();
+      drawTitle();
+    };
+  </script>
+</body>
+</html>
