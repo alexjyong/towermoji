@@ -10,6 +10,8 @@ The goal was to evaluate how far a single LLM session can take a greenfield, non
 
 See [Terramoji](https://github.com/alexjyong/terramoji) for a similar project.
 
+❗[You can play this in your browser now at this link!](https://alexjyong.dev/towermoji/)
+
 ## What It Does
 
 - **Click-to-build** a multi-floor tower with 9 room types (Lobby, Office, Residential, Entertainment, Retail, Restaurant, Gym, Storage, Rooftop Garden)
